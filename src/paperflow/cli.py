@@ -470,3 +470,50 @@ def render_slides(
     typer.echo(f"Notes: {ws_paths.notes_markdown}")
     typer.echo("Stage: rendered")
     typer.echo("Next: run `paperflow qa-content`.")
+
+
+@app.command()
+def qa_content(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Run cross-artifact content QA checks."""
+    from paperflow.qa.consistency import check_cross_artifact_consistency
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.RENDERED:
+        raise InvalidStageError(
+            f"Expected stage 'rendered' but workspace is at "
+            f"'{manifest.stage.value}'. Run `paperflow render-slides` first."
+        )
+
+    result = check_cross_artifact_consistency(ws)
+    qa_dir = ws / "qa"
+    qa_dir.mkdir(parents=True, exist_ok=True)
+
+    from paperflow.util.jsonio import write_json
+    write_json(
+        qa_dir / "content-qa.json",
+        {
+            "passed": result.passed,
+            "issues": [i.model_dump(mode="json") for i in result.issues],
+            "metrics": result.metrics,
+        },
+    )
+
+    if not result.passed:
+        typer.echo("Content QA: FAIL")
+        for i in result.issues:
+            if i.severity == "error":
+                typer.echo(f"  [{i.code}] {i.message}")
+        raise typer.Exit(code=4)
+
+    advance_stage(ws, WorkflowStage.RENDERED, WorkflowStage.CONTENT_QA_PASSED)
+
+    ev_cov = result.metrics.get("evidence_coverage", 0)
+    typer.echo("Content QA: PASS")
+    typer.echo(f"Evidence references: {ev_cov:.0%}")
+    typer.echo("Placeholder scan: PASS")
+    typer.echo("Stage: content_qa_passed")
+    typer.echo("Next: run `paperflow render-preview` for visual QA.")
