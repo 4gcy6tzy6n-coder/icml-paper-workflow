@@ -1,0 +1,121 @@
+{
+  "schema_version": "1.0",
+  "metadata": {
+    "title": "Dynamic Head Selection for Efficient Attention",
+    "authors": ["Alice Researcher", "Bob Scientist"],
+    "venue": "ICML",
+    "year": 2024,
+    "abstract": "We propose a dynamic head selection mechanism that reduces attention FLOPs by 29% while improving accuracy to 87.4%."
+  },
+  "research_problem": {
+    "context": "Attention mechanisms are core to modern deep learning.",
+    "practical_problem": "Standard attention scales quadratically with sequence length.",
+    "technical_problem": "Reducing attention complexity without losing accuracy.",
+    "existing_gap": "Existing sparse attention methods lose accuracy on hard examples.",
+    "research_question": "Can dynamic head selection reduce FLOPs while preserving accuracy?",
+    "evidence_ids": ["ev-p01-b001"]
+  },
+  "contributions": [
+    {
+      "id": "c-1",
+      "statement": "A novel dynamic head selection mechanism for attention.",
+      "evidence_ids": ["ev-p01-b001"],
+      "source_type": "author_stated",
+      "novelty": "First to use learned gating for attention head selection."
+    }
+  ],
+  "method_overview": "Dynamic head selection learns a gating function that filters inactive attention heads.",
+  "method_components": [
+    {
+      "id": "mc-1",
+      "name": "Gating Module",
+      "purpose": "Select active attention heads per input.",
+      "mechanism": "Learned lightweight relevance score with threshold.",
+      "evidence_ids": ["ev-p01-b002"]
+    }
+  ],
+  "experimental_setup": {
+    "datasets": ["CIFAR-100", "ImageNet-1K"],
+    "baselines": ["Baseline A", "Baseline B"],
+    "metrics": ["Accuracy", "FLOPs"],
+    "implementation_summary": "PyTorch 2.0, 8x A100 GPUs, 72 hours training.",
+    "evidence_ids": ["ev-p01-b003"]
+  },
+  "numeric_results": [
+    {
+      "id": "nr-1",
+      "metric": "Accuracy",
+      "value_text": "87.4%",
+      "comparison_text": "3.9 points above Baseline B",
+      "direction": "higher_better",
+      "evidence_ids": ["ev-p01-b003"]
+    },
+    {
+      "id": "nr-2",
+      "metric": "FLOPs",
+      "value_text": "7.2G",
+      "comparison_text": "29% fewer than Baseline A",
+      "direction": "lower_better",
+      "evidence_ids": ["ev-p01-b003"]
+    }
+  ],
+  "findings": [
+    {
+      "id": "f-1",
+      "claim": "Dynamic head selection improves accuracy by 3.9 points over Baseline B.",
+      "importance": "headline",
+      "evidence_ids": ["ev-p01-b003"],
+      "source_type": "author_stated"
+    },
+    {
+      "id": "f-2",
+      "claim": "Dynamic head selection reduces FLOPs by 29% compared to Baseline A.",
+      "importance": "headline",
+      "evidence_ids": ["ev-p01-b003"],
+      "source_type": "author_stated"
+    }
+  ],
+  "limitations": [
+    {
+      "id": "l-1",
+      "statement": "Dynamic head selection introduces additional hyperparameters requiring per-dataset tuning.",
+      "evidence_ids": ["ev-p02-b001"],
+      "source_type": "author_stated",
+      "implication": "May require additional compute budget for hyperparameter search."
+    },
+    {
+      "id": "l-2",
+      "statement": "Evaluated only on image classification and machine translation.",
+      "evidence_ids": ["ev-p02-b001"],
+      "source_type": "author_stated",
+      "implication": "Results may not generalize to other domains."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "ev-p01-b001",
+      "page": 1,
+      "block_id": "p01-b001",
+      "source_text": "We propose a novel approach to attention mechanisms that improves accuracy."
+    },
+    {
+      "id": "ev-p01-b002",
+      "page": 1,
+      "block_id": "p01-b002",
+      "source_text": "We introduce grouped-query attention with dynamic head selection."
+    },
+    {
+      "id": "ev-p01-b003",
+      "page": 2,
+      "block_id": "p02-b001",
+      "source_text": "Our method achieves 87.4% top-1 accuracy, outperforming Baseline B by 3.9 points while using 29% fewer FLOPs."
+    },
+    {
+      "id": "ev-p02-b001",
+      "page": 2,
+      "block_id": "p02-b002",
+      "source_text": "Dynamic head selection introduces additional hyperparameters that require tuning per dataset. We only evaluate on image classification and machine translation."
+    }
+  ],
+  "selected_asset_ids": []
+}

@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "title": "Dynamic Head Selection for Efficient Attention",
+  "language": "zh-CN",
+  "talk_minutes": 15,
+  "slides": [
+    {
+      "slide_id": "slide-01",
+      "purpose": "Title",
+      "assertion_title": "Dynamic Head Selection Improves Attention Efficiency",
+      "takeaway": "Learned gating reduces FLOPs by 29% while improving accuracy.",
+      "supporting_evidence_ids": ["ev-p01-b001"],
+      "layout": "title",
+      "body_lines": [],
+      "source_footer": "ICML 2024",
+      "speaker_notes": "Welcome to this presentation on our dynamic head selection method."
+    },
+    {
+      "slide_id": "slide-02",
+      "purpose": "Problem",
+      "assertion_title": "Standard attention scales quadratically with sequence length",
+      "takeaway": "Real-world deployment is limited by computational cost.",
+      "supporting_evidence_ids": ["ev-p01-b001"],
+      "layout": "two_column",
+      "body_lines": ["Quadratic complexity O(n^2)", "Sparse methods lose accuracy"],
+      "source_footer": "ICML 2024",
+      "speaker_notes": "The quadratic complexity of standard self-attention limits its application to long sequences."
+    },
+    {
+      "slide_id": "slide-03",
+      "purpose": "Gap analysis",
+      "assertion_title": "Existing sparse attention sacrifices accuracy for speed",
+      "takeaway": "A new approach is needed that preserves accuracy.",
+      "supporting_evidence_ids": ["ev-p01-b001"],
+      "layout": "two_column",
+      "body_lines": ["Prior work: trade accuracy for speed", "Need: both efficient AND accurate"],
+      "source_footer": "ICML 2024",
+      "speaker_notes": "Prior approaches like sparse attention and Linformer reduce compute but sacrifice accuracy on hard examples."
+    },
+    {
+      "slide_id": "slide-04",
+      "purpose": "Contributions",
+      "assertion_title": "Dynamic head selection: learn which heads to use per input",
+      "takeaway": "First learned gating mechanism for attention head selection.",
+      "supporting_evidence_ids": ["ev-p01-b002"],
+      "layout": "assertion_figure",
+      "body_lines": ["Learned gating function", "Input-dependent selection"],
+      "source_footer": "ICML 2024",
+      "speaker_notes": "Our key contribution is a learned gating mechanism that dynamically selects attention heads per input."
+    },
+    {
+      "slide_id": "slide-05",
+      "purpose": "Method overview",
+      "assertion_title": "Gating module filters inactive heads before attention computation",
+      "takeaway": "Lightweight scoring determines head relevance.",
+      "supporting_evidence_ids": ["ev-p01-b002"],
+      "layout": "method_flow",
+      "body_lines": ["Input Embedding", "Gating Score", "Head Selection", "Sparse Attention", "Output"],
+      "source_footer": "ICML 2024",
+      "speaker_notes": "The method flow: input embeddings are scored by a lightweight gating module, which selects active heads for sparse attention computation."
+    },
+    {
+      "slide_id": "slide-06",
+      "purpose": "Key component",
+      "assertion_title": "Gating module uses lightweight relevance scoring",
+      "takeaway": "Minimal overhead with learned thresholding.",
+      "supporting_evidence_ids": ["ev-p01-b002"],
+      "layout": "assertion_figure",
+      "body_lines": ["Relevance score per head", "Learned threshold for activation"],
+      "source_footer": "ICML 2024",
+      "speaker_notes": "The gating module computes a relevance score for each attention head and applies a learned threshold to determine activation."
+    }
+  ]
+}

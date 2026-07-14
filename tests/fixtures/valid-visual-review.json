@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0",
+  "inspection_pass": 2,
+  "reviewed_slide_count": 6,
+  "issues": [],
+  "fixes_applied": [
+    {
+      "slide_id": "slide-05",
+      "severity": "warning",
+      "issue_type": "text_overflow",
+      "description": "Adjusted body lines to fit within margin.",
+      "suggested_fix": "Shortened method flow labels."
+    }
+  ],
+  "rerendered": true,
+  "final_pass": true
+}
