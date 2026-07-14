@@ -23,8 +23,14 @@ class MinerUParser:
     name: str = "mineru"
 
     def available(self) -> bool:
-        """Check if any known MinerU CLI binary is on PATH."""
-        return any(shutil.which(cmd) for cmd in _MINERU_COMMANDS)
+        """Check if MinerU is installed (CLI or Python package)."""
+        if any(shutil.which(cmd) for cmd in _MINERU_COMMANDS):
+            return True
+        try:
+            import magic_pdf  # type: ignore[import-untyped] # noqa: F401
+            return True
+        except ImportError:
+            return False
 
     def _find_command(self) -> str:
         for cmd in _MINERU_COMMANDS:

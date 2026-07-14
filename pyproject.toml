@@ -10,6 +10,7 @@ dependencies = [
   "pillow>=10,<12",
   "pyyaml>=6,<7",
   "rich>=13,<15",
+  "magic-pdf>=1.3.12",
 ]
 
 [project.optional-dependencies]
