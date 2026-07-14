@@ -517,3 +517,110 @@ def qa_content(
     typer.echo("Placeholder scan: PASS")
     typer.echo("Stage: content_qa_passed")
     typer.echo("Next: run `paperflow render-preview` for visual QA.")
+
+
+@app.command()
+def render_preview(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Render slide preview images and contact sheet for visual inspection."""
+    from paperflow.paths import WorkspacePaths
+    from paperflow.qa.preview import (
+        convert_pptx_to_pdf,
+        create_contact_sheet,
+        rasterize_pdf_to_images,
+    )
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage not in (WorkflowStage.RENDERED, WorkflowStage.CONTENT_QA_PASSED):
+        raise InvalidStageError(
+            f"Expected stage 'rendered' or 'content_qa_passed' but workspace is at "
+            f"'{manifest.stage.value}'."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+    if not ws_paths.deck_pptx.exists():
+        typer.echo(f"Error: {ws_paths.deck_pptx} not found.", err=True)
+        raise typer.Exit(code=4)
+
+    pdf_result = convert_pptx_to_pdf(ws_paths.deck_pptx)
+    if not pdf_result.success:
+        for w in pdf_result.warnings:
+            typer.echo(f"Error: {w}", err=True)
+        raise typer.Exit(code=3)
+
+    slide_img_dir = ws_paths.qa_dir / "slide-images"
+    img_result = rasterize_pdf_to_images(ws_paths.deck_pdf, slide_img_dir)
+    if not img_result.success:
+        for w in img_result.warnings:
+            typer.echo(f"Error: {w}", err=True)
+        raise typer.Exit(code=3)
+
+    contact_sheet = create_contact_sheet(
+        slide_img_dir, ws_paths.qa_dir / "contact-sheet.png"
+    )
+
+    typer.echo(f"Preview images: {slide_img_dir}")
+    typer.echo(f"  {len(img_result.output_paths)} slides")
+    if contact_sheet.success:
+        typer.echo(f"Contact sheet: {contact_sheet.output_paths[0]}")
+    typer.echo("Next: inspect slide images and write qa/visual-review.json.")
+
+
+@app.command()
+def validate_visual_review(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Validate the visual review JSON against mandatory rules."""
+    from paperflow.models.slides import Storyboard
+    from paperflow.paths import WorkspacePaths
+    from paperflow.qa.preview import validate_visual_review as validate_vr
+    from paperflow.util.jsonio import read_json, write_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.CONTENT_QA_PASSED:
+        raise InvalidStageError(
+            f"Expected stage 'content_qa_passed' but workspace is at "
+            f"'{manifest.stage.value}'. Run `paperflow qa-content` first."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+    review_path = ws_paths.qa_dir / "visual-review.json"
+
+    if not review_path.exists():
+        typer.echo(f"Error: {review_path} not found.", err=True)
+        raise typer.Exit(code=4)
+
+    review = read_json(review_path)
+
+    sb_data = read_json(ws_paths.storyboard)
+    storyboard = Storyboard.model_validate(sb_data)
+    total_slides = len(storyboard.slides)
+
+    issues = validate_vr(review, total_slides)
+    errors = [i for i in issues if i.severity == "error"]
+
+    write_json(
+        ws_paths.qa_dir / "visual-review-validation.json",
+        {
+            "passed": len(errors) == 0,
+            "issues": [i.model_dump(mode="json") for i in issues],
+        },
+    )
+
+    if errors:
+        typer.echo(f"Visual review invalid: {len(errors)} error(s)")
+        for e in errors:
+            typer.echo(f"  [{e.code}] {e.message}")
+        raise typer.Exit(code=4)
+
+    advance_stage(ws, WorkflowStage.CONTENT_QA_PASSED, WorkflowStage.VISUAL_QA_PASSED)
+
+    typer.echo("Visual review: PASS")
+    typer.echo(f"Fix cycles: {review.get('inspection_pass', 0)}")
+    typer.echo("Stage: visual_qa_passed")
+    typer.echo("Next: run `paperflow finalize`.")
