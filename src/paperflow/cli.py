@@ -367,3 +367,61 @@ def render_report(
             typer.echo(f"Warning: {w}")
 
     typer.echo("Report rendered successfully.")
+
+
+@app.command()
+def validate_storyboard(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Validate a slide storyboard against semantic rules."""
+    from paperflow.models.slides import Storyboard
+    from paperflow.paths import WorkspacePaths
+    from paperflow.qa.content import validate_storyboard
+    from paperflow.util.jsonio import read_json, write_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.REPORT_READY:
+        raise InvalidStageError(
+            f"Expected stage 'report_ready' but workspace is at '{manifest.stage.value}'. "
+            f"Author the storyboard first."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+
+    if not ws_paths.storyboard.exists():
+        typer.echo(f"Error: {ws_paths.storyboard} not found.", err=True)
+        raise typer.Exit(code=4)
+
+    sb_data = read_json(ws_paths.storyboard)
+    storyboard = Storyboard.model_validate(sb_data)
+
+    issues = validate_storyboard(storyboard)
+    errors = [i for i in issues if i.severity == "error"]
+    warnings = [i for i in issues if i.severity == "warning"]
+
+    ws_paths.qa_dir.mkdir(parents=True, exist_ok=True)
+    qa_path = ws_paths.qa_dir / "storyboard-validation.json"
+    write_json(
+        qa_path,
+        {
+            "passed": len(errors) == 0,
+            "issues": [i.model_dump(mode="json") for i in issues],
+        },
+    )
+
+    if errors:
+        typer.echo(f"Storyboard invalid: {len(errors)} error(s)")
+        for e in errors:
+            typer.echo(f"  [{e.code}] {e.message}")
+        raise typer.Exit(code=4)
+
+    for w in warnings:
+        typer.echo(f"Warning: [{w.code}] {w.message}")
+
+    advance_stage(ws, WorkflowStage.REPORT_READY, WorkflowStage.STORYBOARD_READY)
+
+    typer.echo("Storyboard validation: PASS")
+    typer.echo("Stage: storyboard_ready")
+    typer.echo("Next: run `paperflow render-slides`.")
