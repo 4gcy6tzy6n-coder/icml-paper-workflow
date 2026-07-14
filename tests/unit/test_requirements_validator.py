@@ -25,6 +25,13 @@ def test_malformed_json_returns_req_json_invalid(tmp_path: Path) -> None:
     assert {issue.code for issue in issues} == {"REQ_JSON_INVALID"}
 
 
+def test_invalid_utf8_returns_req_json_invalid(tmp_path: Path) -> None:
+    path = tmp_path / "requirements.json"
+    path.write_bytes(b"\xff")
+    _, issues = validate_requirements_file(path, "a" * 64)
+    assert {issue.code for issue in issues} == {"REQ_JSON_INVALID"}
+
+
 def test_wrong_pdf_returns_req_source_mismatch(tmp_path: Path) -> None:
     path = tmp_path / "requirements.json"
     write_json(path, make_authoring_requirements("b" * 64))
@@ -36,6 +43,24 @@ def test_content_edit_returns_digest_mismatch(tmp_path: Path) -> None:
     path = tmp_path / "requirements.json"
     data = make_authoring_requirements("a" * 64)
     data["visual"]["style"] = "changed"
+    write_json(path, data)
+    _, issues = validate_requirements_file(path, "a" * 64)
+    assert {issue.code for issue in issues} == {"REQ_CONFIRMATION_DIGEST_MISMATCH"}
+
+
+def test_unknown_field_returns_digest_mismatch(tmp_path: Path) -> None:
+    path = tmp_path / "requirements.json"
+    data = make_authoring_requirements("a" * 64)
+    data["visual"]["reviewer_note"] = "added after confirmation"
+    write_json(path, data)
+    _, issues = validate_requirements_file(path, "a" * 64)
+    assert {issue.code for issue in issues} == {"REQ_CONFIRMATION_DIGEST_MISMATCH"}
+
+
+def test_surrounding_whitespace_edit_returns_digest_mismatch(tmp_path: Path) -> None:
+    path = tmp_path / "requirements.json"
+    data = make_authoring_requirements("a" * 64)
+    data["visual"]["style"] = " 清晰、克制、学术化 "
     write_json(path, data)
     _, issues = validate_requirements_file(path, "a" * 64)
     assert {issue.code for issue in issues} == {"REQ_CONFIRMATION_DIGEST_MISMATCH"}

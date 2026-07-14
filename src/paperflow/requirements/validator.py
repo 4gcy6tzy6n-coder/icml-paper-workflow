@@ -28,7 +28,7 @@ def validate_requirements_file(
         return None, [_error("REQ_FILE_MISSING", f"Requirements not found: {path}", str(path))]
     try:
         raw = read_json(path)
-    except (json.JSONDecodeError, OSError) as exc:
+    except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
         return None, [
             _error("REQ_JSON_INVALID", f"Cannot read requirements JSON: {exc}", str(path))
         ]
@@ -48,7 +48,7 @@ def validate_requirements_file(
                 "source.pdf_sha256",
             )
         )
-    if compute_requirements_digest(requirements) != requirements.confirmation.content_sha256:
+    if compute_requirements_digest(raw) != requirements.confirmation.content_sha256:
         issues.append(
             _error(
                 "REQ_CONFIRMATION_DIGEST_MISMATCH",
