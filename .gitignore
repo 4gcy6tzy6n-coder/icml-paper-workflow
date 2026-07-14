@@ -9,6 +9,7 @@ node_modules/
 .mypy_cache/
 dist/
 .work/
+.worktrees/
 *.egg-info/
 .env
 *.tmp
