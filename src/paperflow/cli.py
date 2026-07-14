@@ -134,8 +134,8 @@ def parse(
     if fallbacks:
         typer.echo(f"Fallbacks attempted: {', '.join(fallbacks)}")
     typer.echo(
-        "Next semantic step: read source/parsed-paper.md and write "
-        "source/paper-ir.json according to the installed Skill."
+        "Next: run paperflow build-evidence, complete the Skill requirements "
+        "interview, and run paperflow validate-requirements."
     )
 
 
@@ -153,10 +153,13 @@ def build_evidence(
     ws = Path(workspace).resolve()
     manifest = load_manifest(ws)
 
-    if manifest.stage not in (WorkflowStage.PARSED, WorkflowStage.IR_READY):
+    if manifest.stage not in (
+        WorkflowStage.PARSED,
+        WorkflowStage.REQUIREMENTS_READY,
+        WorkflowStage.IR_READY,
+    ):
         raise InvalidStageError(
-            f"Expected stage 'parsed' but workspace is at '{manifest.stage.value}'. "
-            f"Run `paperflow parse` first."
+            f"Expected a parsed workspace but workspace is at '{manifest.stage.value}'."
         )
 
     ws_paths = WorkspacePaths(ws)
@@ -172,7 +175,53 @@ def build_evidence(
 
     typer.echo(f"Evidence map built: {len(evidence)} references")
     typer.echo(f"Semantic packet: {packet_path}")
-    typer.echo("Next: Author source/paper-ir.json, then run `paperflow validate-ir`.")
+    typer.echo(
+        "Next: complete the Skill requirements interview, write "
+        "source/authoring-requirements.json, and run paperflow validate-requirements."
+    )
+
+
+@app.command()
+def validate_requirements(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Validate confirmed authoring requirements for this source PDF."""
+    from paperflow.paths import WorkspacePaths
+    from paperflow.requirements.validator import validate_requirements_file
+    from paperflow.util.jsonio import write_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+    if manifest.stage not in (WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY):
+        raise InvalidStageError(
+            "Expected stage 'parsed' or 'requirements_ready' but workspace is at "
+            f"'{manifest.stage.value}'."
+        )
+
+    paths = WorkspacePaths(ws)
+    requirements, issues = validate_requirements_file(
+        paths.authoring_requirements,
+        manifest.source_sha256,
+    )
+    errors = [issue for issue in issues if issue.severity == "error"]
+    write_json(
+        paths.qa_dir / "requirements-validation.json",
+        {
+            "passed": not errors,
+            "issues": [issue.model_dump(mode="json") for issue in issues],
+        },
+    )
+    if errors or requirements is None:
+        typer.echo(f"Requirements invalid: {len(errors)} error(s)")
+        for error in errors:
+            typer.echo(f"  [{error.code}] {error.message}")
+        raise typer.Exit(code=4)
+
+    if manifest.stage == WorkflowStage.PARSED:
+        advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY)
+    typer.echo("Requirements validation: PASS")
+    typer.echo("Stage: requirements_ready")
+    typer.echo("Next: author source/paper-ir.json and run paperflow validate-ir.")
 
 
 @app.command()
@@ -188,9 +237,13 @@ def validate_ir(
     ws = Path(workspace).resolve()
     manifest = load_manifest(ws)
 
-    if manifest.stage not in (WorkflowStage.PARSED, WorkflowStage.IR_READY):
+    if manifest.stage not in (
+        WorkflowStage.REQUIREMENTS_READY,
+        WorkflowStage.IR_READY,
+    ):
         raise InvalidStageError(
-            f"Expected stage 'parsed' but workspace is at '{manifest.stage.value}'."
+            "Expected stage 'requirements_ready' but workspace is at "
+            f"'{manifest.stage.value}'. Run paperflow validate-requirements first."
         )
 
     ws_paths = WorkspacePaths(ws)
@@ -228,7 +281,12 @@ def validate_ir(
             typer.echo(f"  [{w.code}] (warning) {w.message}")
         raise typer.Exit(code=4)
 
-    advance_stage(ws, manifest.stage, WorkflowStage.IR_READY)
+    if manifest.stage == WorkflowStage.REQUIREMENTS_READY:
+        advance_stage(
+            ws,
+            WorkflowStage.REQUIREMENTS_READY,
+            WorkflowStage.IR_READY,
+        )
 
     coverage = _compute_coverage(ir)
     typer.echo("Paper IR valid.")

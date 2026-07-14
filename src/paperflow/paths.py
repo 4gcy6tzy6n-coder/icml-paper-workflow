@@ -39,6 +39,10 @@ class WorkspacePaths:
         return self.source_dir / "document-structure.json"
 
     @property
+    def authoring_requirements(self) -> Path:
+        return self.source_dir / "authoring-requirements.json"
+
+    @property
     def paper_ir(self) -> Path:
         return self.source_dir / "paper-ir.json"
 

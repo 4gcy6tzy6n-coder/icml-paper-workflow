@@ -5,9 +5,12 @@ import pytest
 from typer.testing import CliRunner
 
 from paperflow.cli import app
+from paperflow.manifest import load_manifest
+from paperflow.models.common import WorkflowStage
 from paperflow.models.document import ParsedDocument, TextBlock
 from paperflow.util.hashing import sha256_file
-from paperflow.util.jsonio import read_json
+from paperflow.util.jsonio import read_json, write_json
+from tests.fixtures.make_authoring_requirements import make_authoring_requirements
 from tests.fixtures.make_sample_pdf import make_sample_pdf
 
 runner = CliRunner()
@@ -109,3 +112,62 @@ def test_parse_prefers_mineru_api_and_keeps_canonical_outputs(
     assert document["parser_name"] == "mineru_api"
     assert document["blocks"][0]["id"] == "p01-b001"
     assert document["assets"]
+
+
+def _parsed_requirements_workspace(tmp_path: Path) -> Path:
+    pdf = tmp_path / "requirements-paper.pdf"
+    make_sample_pdf(pdf)
+    workspace = tmp_path / ".work" / "requirements-paper"
+    assert runner.invoke(app, ["init", str(pdf), str(workspace)]).exit_code == 0
+    assert runner.invoke(app, ["parse", str(workspace)]).exit_code == 0
+    return workspace
+
+
+def test_validate_requirements_advances_stage(tmp_path: Path) -> None:
+    workspace = _parsed_requirements_workspace(tmp_path)
+    manifest = load_manifest(workspace)
+    write_json(
+        workspace / "source" / "authoring-requirements.json",
+        make_authoring_requirements(manifest.source_sha256),
+    )
+    result = runner.invoke(app, ["validate-requirements", str(workspace)])
+    assert result.exit_code == 0
+    assert "Requirements validation: PASS" in result.stdout
+    assert load_manifest(workspace).stage == WorkflowStage.REQUIREMENTS_READY
+    qa = read_json(workspace / "qa" / "requirements-validation.json")
+    assert qa["passed"] is True
+
+
+def test_validate_requirements_missing_file_keeps_parsed_stage(
+    tmp_path: Path,
+) -> None:
+    workspace = _parsed_requirements_workspace(tmp_path)
+    result = runner.invoke(app, ["validate-requirements", str(workspace)])
+    assert result.exit_code == 4
+    assert "REQ_FILE_MISSING" in result.stdout
+    assert load_manifest(workspace).stage == WorkflowStage.PARSED
+    qa = read_json(workspace / "qa" / "requirements-validation.json")
+    assert qa["passed"] is False
+
+
+def test_validate_requirements_digest_mismatch_keeps_parsed_stage(
+    tmp_path: Path,
+) -> None:
+    workspace = _parsed_requirements_workspace(tmp_path)
+    manifest = load_manifest(workspace)
+    data = make_authoring_requirements(manifest.source_sha256)
+    data["visual"]["style"] = "changed after confirmation"
+    write_json(workspace / "source" / "authoring-requirements.json", data)
+    result = runner.invoke(app, ["validate-requirements", str(workspace)])
+    assert result.exit_code == 4
+    assert "REQ_CONFIRMATION_DIGEST_MISMATCH" in result.stdout
+    assert load_manifest(workspace).stage == WorkflowStage.PARSED
+
+
+def test_validate_ir_rejects_parsed_stage(tmp_path: Path) -> None:
+    workspace = _parsed_requirements_workspace(tmp_path)
+    result = runner.invoke(app, ["validate-ir", str(workspace)])
+    assert result.exit_code == 1
+    assert result.exception is not None
+    assert "requirements_ready" in str(result.exception)
+    assert load_manifest(workspace).stage == WorkflowStage.PARSED

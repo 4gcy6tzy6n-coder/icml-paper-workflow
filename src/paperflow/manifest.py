@@ -11,7 +11,8 @@ from paperflow.util.jsonio import read_json, write_json
 
 _ALLOWED_TRANSITIONS: dict[WorkflowStage, WorkflowStage] = {
     WorkflowStage.INITIALIZED: WorkflowStage.PARSED,
-    WorkflowStage.PARSED: WorkflowStage.IR_READY,
+    WorkflowStage.PARSED: WorkflowStage.REQUIREMENTS_READY,
+    WorkflowStage.REQUIREMENTS_READY: WorkflowStage.IR_READY,
     WorkflowStage.IR_READY: WorkflowStage.REPORT_READY,
     WorkflowStage.REPORT_READY: WorkflowStage.STORYBOARD_READY,
     WorkflowStage.STORYBOARD_READY: WorkflowStage.RENDERED,

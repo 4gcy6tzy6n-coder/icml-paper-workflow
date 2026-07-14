@@ -4,6 +4,7 @@ from enum import StrEnum
 class WorkflowStage(StrEnum):
     INITIALIZED = "initialized"
     PARSED = "parsed"
+    REQUIREMENTS_READY = "requirements_ready"
     IR_READY = "ir_ready"
     REPORT_READY = "report_ready"
     STORYBOARD_READY = "storyboard_ready"

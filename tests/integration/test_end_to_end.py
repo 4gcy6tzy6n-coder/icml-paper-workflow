@@ -65,7 +65,8 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     issues = validate_paper_ir(ir, ir.evidence)
     errors = [i for i in issues if i.severity == "error"]
     assert len(errors) == 0
-    advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.IR_READY)
+    advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY)
+    advance_stage(ws, WorkflowStage.REQUIREMENTS_READY, WorkflowStage.IR_READY)
 
     # 7. Inject valid storyboard
     sb_data = read_json(FIXTURES / "valid-storyboard.json")

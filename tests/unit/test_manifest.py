@@ -68,7 +68,8 @@ def test_full_transition_chain(tmp_path: Path) -> None:
     create_manifest(pdf, ws)
     transitions = [
         (WorkflowStage.INITIALIZED, WorkflowStage.PARSED),
-        (WorkflowStage.PARSED, WorkflowStage.IR_READY),
+        (WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY),
+        (WorkflowStage.REQUIREMENTS_READY, WorkflowStage.IR_READY),
         (WorkflowStage.IR_READY, WorkflowStage.REPORT_READY),
         (WorkflowStage.REPORT_READY, WorkflowStage.STORYBOARD_READY),
         (WorkflowStage.STORYBOARD_READY, WorkflowStage.RENDERED),
