@@ -657,3 +657,31 @@ def finalize(
     for p in outputs:
         typer.echo(f"  {p.relative_to(dist_dir)}")
     typer.echo("Final manifest: qa/final-manifest.json")
+
+
+@app.command()
+def doctor() -> None:
+    """Check the runtime environment for required and optional tools."""
+    from paperflow.util.check_environment import check_environment
+
+    checks = check_environment()
+
+    typer.echo(f"{'Tool':<16} {'Required':<10} {'Version':<30} {'Status':<8}")
+    typer.echo("-" * 66)
+
+    has_missing_required = False
+
+    for c in checks:
+        status = "✓" if c.available else ("✗" if c.required else "(opt) ✗")
+        version = c.version or "N/A"
+        typer.echo(f"{c.name:<16} {'yes' if c.required else 'no':<10} {version:<30} {status:<8}")
+        if c.required and not c.available:
+            has_missing_required = True
+            if c.action:
+                typer.echo(f"  → {c.action}")
+
+    if has_missing_required:
+        typer.echo("\nSome required tools are missing. Install them and try again.")
+        raise typer.Exit(code=1)
+    else:
+        typer.echo("\nAll required tools available.")
