@@ -25,6 +25,29 @@ def test_select_parser_chain_returns_pymupdf_by_default() -> None:
     assert "pymupdf" in names
 
 
+def test_api_parser_precedes_local_mineru_when_key_is_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MINERU_API_KEY", "test-key")
+
+    chain = select_parser_chain(WorkflowConfig())
+
+    assert chain[0].name == "mineru_api"
+
+
+def test_api_parser_is_not_duplicated_in_custom_order(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MINERU_API_KEY", "test-key")
+    config = WorkflowConfig(
+        preferred_parser_order=["mineru_api", "mineru", "pymupdf"]
+    )
+
+    chain = select_parser_chain(config)
+
+    assert [parser.name for parser in chain].count("mineru_api") == 1
+
+
 def test_parse_with_fallback_first_succeeds(tmp_path: Path) -> None:
     avail = FakeDocumentParser("parser1", True)
     not_avail = FakeDocumentParser("parser2", False)

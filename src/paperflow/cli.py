@@ -96,6 +96,25 @@ def parse(
     source_pdf = Path(manifest.source_pdf)
     doc, fallbacks, parser_used = parse_with_fallback(source_pdf, ws, chain)
 
+    from paperflow.ingest.asset_extractor import AssetExtractor
+    from paperflow.paths import WorkspacePaths
+    from paperflow.util.jsonio import write_json
+
+    try:
+        assets = AssetExtractor(source_pdf, ws).extract(doc)
+        doc = doc.model_copy(update={"assets": assets})
+    except Exception as exc:
+        doc = doc.model_copy(
+            update={
+                "warnings": [
+                    *doc.warnings,
+                    f"Asset extraction failed; continue without asset registry: {exc}",
+                ]
+            }
+        )
+
+    write_json(WorkspacePaths(ws).parsed_document, doc.model_dump(mode="json"))
+
     manifest = load_manifest(ws)
     manifest = manifest.model_copy(
         update={

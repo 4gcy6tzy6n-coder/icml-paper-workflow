@@ -1,5 +1,6 @@
 """Check the PaperFlow runtime environment."""
 
+import os
 import shutil
 import subprocess
 import sys
@@ -158,6 +159,22 @@ def check_environment() -> list[ToolCheck]:
             available=mineru_available,
             version=_get_version(["magic-pdf", "--version"]) if mineru_available else None,
             action="Optional: pip install magic-pdf",
+        )
+    )
+
+    # MinerU Precision Extract API (optional)
+    mineru_api_available = bool(os.environ.get("MINERU_API_KEY"))
+    checks.append(
+        ToolCheck(
+            name="MinerU API",
+            required=False,
+            available=mineru_api_available,
+            version=None,
+            action=(
+                "Optional: export MINERU_API_KEY in the current shell"
+                if not mineru_api_available
+                else ""
+            ),
         )
     )
 

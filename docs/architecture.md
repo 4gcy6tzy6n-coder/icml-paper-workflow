@@ -29,7 +29,7 @@ Each transition is enforced by the `paperflow` CLI. Invalid transitions exit wit
 
 ```
   ┌──────────────────┐
-  │   parsed-paper.md │ ← Deterministic (PyMuPDF / MinerU)
+  │   parsed-paper.md │ ← Deterministic (MinerU API / local parsers)
   └────────┬─────────┘
            │
   ┌────────▼─────────┐
@@ -53,4 +53,6 @@ No renderer may independently reinterpret the source paper.
 - **Stable evidence IDs**: Text block IDs (`p01-b001`) are deterministic across parse runs.
 - **Atomic writes**: All JSON writes use `.tmp` → rename pattern.
 - **Editable PPTX**: Layouts position text/shapes programmatically; no rasterized slides.
-- **Optional parsers**: MinerU and MarkItDown enhance parsing but PyMuPDF is the hard floor.
+- **Optional parsers**: When `MINERU_API_KEY` exists, the MinerU API signed-upload
+  flow is preferred and its raw JSON is retained for auditability. Local MinerU
+  and MarkItDown remain optional; PyMuPDF is the hard floor.

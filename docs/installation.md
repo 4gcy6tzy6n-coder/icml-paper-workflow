@@ -19,6 +19,7 @@ brew install libreoffice
 brew install poppler
 
 # Optional: Higher-quality PDF parsing
+export MINERU_API_KEY="<temporary MinerU API token>"
 pip install magic-pdf     # MinerU CLI
 pip install 'markitdown[pdf]'  # MarkItDown
 ```
@@ -68,6 +69,7 @@ Quarto:        1.x      ✓
 LibreOffice:   24.x     ✓
 Poppler:       24.x     ✓
 MinerU:        (optional) ✓/✗
+MinerU API:    (optional) ✓/✗
 MarkItDown:    (optional) ✗
 All required tools available.
 ```
@@ -78,3 +80,5 @@ All required tools available.
 - **LibreOffice not found**: Install with `brew install libreoffice` or `apt-get install libreoffice`
 - **Poppler not found**: Install with `brew install poppler` or `apt-get install poppler-utils`
 - **MinerU not found**: Install with `pip install magic-pdf`. The pipeline falls back to PyMuPDF if unavailable.
+- **MinerU API unavailable**: Set `MINERU_API_KEY` in the shell that runs
+  `paperflow`. Do not add the token to `.env`, project configuration, or Git.

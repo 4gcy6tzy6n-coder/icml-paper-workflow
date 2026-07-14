@@ -60,6 +60,7 @@ paper.pdf
 - Quarto (`brew install quarto`)
 - LibreOffice (`brew install libreoffice`)
 - Poppler (`brew install poppler`)
+- Optional: MinerU Precision Extract API token in `MINERU_API_KEY`
 - Optional: MinerU CLI (`pip install magic-pdf`)
 - Optional: MarkItDown (`pip install 'markitdown[pdf]'`)
 
@@ -67,7 +68,7 @@ paper.pdf
 
 ```bash
 paperflow init PDF WORKSPACE          # Initialize workspace
-paperflow parse WORKSPACE             # Parse PDF (MinerU→MarkItDown→PyMuPDF)
+paperflow parse WORKSPACE             # Parse PDF (MinerU API→local fallbacks)
 paperflow build-evidence WORKSPACE    # Build evidence map
 paperflow validate-ir WORKSPACE       # Validate Paper IR
 paperflow scaffold-report WORKSPACE   # Create report outline
@@ -83,6 +84,11 @@ paperflow status WORKSPACE            # Show current stage
 paperflow doctor                     # Check environment
 paperflow version                    # Print version
 ```
+
+When `MINERU_API_KEY` is set, `paperflow parse` uploads the source PDF through
+MinerU's signed-upload API and saves the raw result archive and extracted JSON
+under `WORKSPACE/source/mineru-api/`. The credential is read only from the
+process environment and is not written to workspace artifacts.
 
 ## Development
 

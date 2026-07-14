@@ -1,3 +1,5 @@
+import pytest
+
 from paperflow.util.check_environment import check_environment
 
 
@@ -25,3 +27,16 @@ def test_optional_tools_are_not_required() -> None:
     markitdown = next(c for c in checks if c.name == "MarkItDown")
     assert mineru.required is False
     assert markitdown.required is False
+
+
+def test_mineru_api_status_uses_environment_without_exposing_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("MINERU_API_KEY", "test-secret-value")
+
+    checks = check_environment()
+
+    mineru_api = next(check for check in checks if check.name == "MinerU API")
+    assert mineru_api.available is True
+    assert mineru_api.required is False
+    assert "test-secret-value" not in repr(checks)

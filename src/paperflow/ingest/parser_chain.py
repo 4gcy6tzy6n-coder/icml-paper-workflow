@@ -33,17 +33,22 @@ class FakeDocumentParser:
 def select_parser_chain(config: object) -> list[DocumentParser]:
     """Select available parsers in preferred order from config."""
     from paperflow.ingest.markitdown_parser import MarkItDownParser
+    from paperflow.ingest.mineru_api_parser import MinerUApiParser
     from paperflow.ingest.mineru_parser import MinerUParser
     from paperflow.ingest.pymupdf_parser import PyMuPDFParser
 
     all_parsers: list[DocumentParser] = [
+        MinerUApiParser(),
         MinerUParser(),
         MarkItDownParser(),
         PyMuPDFParser(),
     ]
     name_to_parser = {p.name: p for p in all_parsers}
 
-    order = getattr(config, "preferred_parser_order", ["mineru", "markitdown", "pymupdf"])
+    configured_order = getattr(
+        config, "preferred_parser_order", ["mineru", "markitdown", "pymupdf"]
+    )
+    order = list(dict.fromkeys(["mineru_api", *configured_order]))
 
     chain: list[DocumentParser] = []
     for name in order:
