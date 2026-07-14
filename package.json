@@ -1,0 +1,9 @@
+{
+  "name": "icml-paper-workflow",
+  "private": true,
+  "packageManager": "pnpm@11.13.0",
+  "scripts": {
+    "test:slides": "pnpm --dir slides test",
+    "paperflow:render-slides": "pnpm --dir slides render"
+  }
+}

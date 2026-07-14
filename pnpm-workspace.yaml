@@ -1,0 +1,4 @@
+packages:
+  - slides
+allowBuilds:
+  esbuild: true
