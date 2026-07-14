@@ -425,3 +425,48 @@ def validate_storyboard(
     typer.echo("Storyboard validation: PASS")
     typer.echo("Stage: storyboard_ready")
     typer.echo("Next: run `paperflow render-slides`.")
+
+
+@app.command()
+def render_slides(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Render the slides storyboard to PPTX and speaker notes."""
+    from paperflow.paths import WorkspacePaths
+    from paperflow.util.commands import run_command
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.STORYBOARD_READY:
+        raise InvalidStageError(
+            f"Expected stage 'storyboard_ready' but workspace is at "
+            f"'{manifest.stage.value}'. Run `paperflow validate-storyboard` first."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+
+    result = run_command(
+        ["pnpm", "paperflow:render-slides", "--", str(ws)],
+        timeout_s=120,
+    )
+
+    if result.returncode != 0:
+        typer.echo("Slide rendering failed:", err=True)
+        typer.echo(result.stderr, err=True)
+        raise typer.Exit(code=3)
+
+    if not ws_paths.deck_pptx.exists():
+        typer.echo(f"Error: {ws_paths.deck_pptx} was not created.", err=True)
+        raise typer.Exit(code=3)
+
+    if not ws_paths.notes_markdown.exists():
+        typer.echo(f"Error: {ws_paths.notes_markdown} was not created.", err=True)
+        raise typer.Exit(code=3)
+
+    advance_stage(ws, WorkflowStage.STORYBOARD_READY, WorkflowStage.RENDERED)
+
+    typer.echo(f"PPTX: {ws_paths.deck_pptx}")
+    typer.echo(f"Notes: {ws_paths.notes_markdown}")
+    typer.echo("Stage: rendered")
+    typer.echo("Next: run `paperflow qa-content`.")
