@@ -1,0 +1,6 @@
+{
+  "name": "icml-paper-workflow",
+  "version": "0.1.0",
+  "description": "Convert one ICML-style paper into a source-grounded report and editable presentation.",
+  "skills": ["./skills/icml-paper-to-report-deck"]
+}
