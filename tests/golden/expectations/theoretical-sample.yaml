@@ -1,0 +1,28 @@
+# Golden paper expectation template — theoretical/optimization category
+# Replace with actual values after running the paper through the pipeline.
+
+source_pdf_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+paper_slug: "theoretical-sample"
+
+expected:
+  contribution_count: 3
+  contribution_keywords:
+    - "theoretical"
+    - "convergence"
+    - "bound"
+  datasets: []
+  baselines: []
+  metrics:
+    - "regret"
+    - "convergence rate"
+  headline_numeric_results:
+    - metric: "Convergence rate"
+      value_text: "O(1/sqrt(T))"
+  required_figure_labels: []
+  author_stated_limitations_min: 1
+
+quality_targets:
+  evidence_coverage: 1.0
+  report_required_sections: 16
+  slide_count_min: 13
+  slide_count_max: 15

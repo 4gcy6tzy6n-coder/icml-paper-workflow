@@ -1,0 +1,34 @@
+# Golden paper expectation template — systems/LLM infrastructure category
+# Replace with actual values after running the paper through the pipeline.
+
+source_pdf_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+paper_slug: "systems-llm"
+
+expected:
+  contribution_count: 3
+  contribution_keywords:
+    - "throughput"
+    - "inference"
+    - "GPU"
+  datasets:
+    - "ShareGPT"
+    - "Alpaca"
+  baselines:
+    - "vLLM"
+    - "TGI"
+  metrics:
+    - "tokens/s"
+    - "latency"
+    - "memory"
+  headline_numeric_results:
+    - metric: "Throughput"
+      value_text: "2.5x improvement"
+  required_figure_labels:
+    - "system overview"
+  author_stated_limitations_min: 1
+
+quality_targets:
+  evidence_coverage: 1.0
+  report_required_sections: 16
+  slide_count_min: 13
+  slide_count_max: 15

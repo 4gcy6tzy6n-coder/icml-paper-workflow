@@ -12,3 +12,6 @@ dist/
 *.egg-info/
 .env
 *.tmp
+# Golden paper PDFs may be gitignored if redistribution is restricted
+tests/golden/*/paper.pdf
+tests/golden/**/paper.pdf
