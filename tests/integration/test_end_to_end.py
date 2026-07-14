@@ -20,7 +20,9 @@ from paperflow.models.slides import Storyboard
 from paperflow.paths import WorkspacePaths
 from paperflow.qa.consistency import check_cross_artifact_consistency
 from paperflow.qa.finalize import build_final_manifest
+from paperflow.requirements.validator import validate_requirements_file
 from paperflow.util.jsonio import read_json, write_json
+from tests.fixtures.make_authoring_requirements import make_authoring_requirements
 from tests.fixtures.make_sample_pdf import make_sample_pdf
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
@@ -55,37 +57,48 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     write_json(ws_paths.evidence_map, [ev.model_dump(mode="json") for ev in evidence])
     assert len(evidence) > 0
 
-    # 5. Inject valid fixture IR
+    # 5. Validate sealed authoring requirements
+    requirements_data = make_authoring_requirements(manifest.source_sha256)
+    write_json(ws_paths.authoring_requirements, requirements_data)
+    requirements, requirement_issues = validate_requirements_file(
+        ws_paths.authoring_requirements,
+        manifest.source_sha256,
+    )
+    assert requirements is not None
+    assert requirement_issues == []
+    advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY)
+    assert load_manifest(ws).stage == WorkflowStage.REQUIREMENTS_READY
+
+    # 6. Inject valid fixture IR
     ir_data = read_json(FIXTURES / "valid-paper-ir.json")
     ir = PaperIR.model_validate(ir_data)
     write_json(ws_paths.paper_ir, ir.model_dump(mode="json"))
 
-    # 6. Validate IR
+    # 7. Validate IR
     from paperflow.evidence.validator import validate_paper_ir
     issues = validate_paper_ir(ir, ir.evidence)
     errors = [i for i in issues if i.severity == "error"]
     assert len(errors) == 0
-    advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY)
     advance_stage(ws, WorkflowStage.REQUIREMENTS_READY, WorkflowStage.IR_READY)
 
-    # 7. Inject valid storyboard
+    # 8. Inject valid storyboard
     sb_data = read_json(FIXTURES / "valid-storyboard.json")
     storyboard = Storyboard.model_validate(sb_data)
     write_json(ws_paths.storyboard, storyboard.model_dump(mode="json"))
 
-    # 8. Validate storyboard
+    # 9. Validate storyboard
     from paperflow.qa.content import validate_storyboard
     sb_issues = validate_storyboard(storyboard)
     sb_errors = [i for i in sb_issues if i.severity == "error"]
     assert len(sb_errors) == 0
     assert len(storyboard.slides) >= 6
 
-    # 9. Simulate report rendering
+    # 10. Simulate report rendering
     advance_stage(ws, WorkflowStage.IR_READY, WorkflowStage.REPORT_READY)
     advance_stage(ws, WorkflowStage.REPORT_READY, WorkflowStage.STORYBOARD_READY)
     advance_stage(ws, WorkflowStage.STORYBOARD_READY, WorkflowStage.RENDERED)
 
-    # 10. Content QA
+    # 11. Content QA
     qa_result = check_cross_artifact_consistency(ws)
     write_json(
         ws_paths.qa_dir / "content-qa.json",
@@ -96,7 +109,7 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     )
     advance_stage(ws, WorkflowStage.RENDERED, WorkflowStage.CONTENT_QA_PASSED)
 
-    # 11. Inject visual review
+    # 12. Inject visual review
     vr_data = read_json(FIXTURES / "valid-visual-review.json")
     write_json(ws_paths.qa_dir / "visual-review.json", vr_data)
 
@@ -106,7 +119,7 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     assert len(vr_errors) == 0
     advance_stage(ws, WorkflowStage.CONTENT_QA_PASSED, WorkflowStage.VISUAL_QA_PASSED)
 
-    # 12. Finalize
+    # 13. Finalize
     final_manifest = build_final_manifest(
         workspace=ws,
         source_pdf=pdf_path,

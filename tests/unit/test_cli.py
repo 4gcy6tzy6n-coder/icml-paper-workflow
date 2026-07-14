@@ -14,6 +14,7 @@ from tests.fixtures.make_authoring_requirements import make_authoring_requiremen
 from tests.fixtures.make_sample_pdf import make_sample_pdf
 
 runner = CliRunner()
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 def test_version_command() -> None:
@@ -171,3 +172,26 @@ def test_validate_ir_rejects_parsed_stage(tmp_path: Path) -> None:
     assert result.exception is not None
     assert "requirements_ready" in str(result.exception)
     assert load_manifest(workspace).stage == WorkflowStage.PARSED
+
+
+def test_validate_ir_accepts_requirements_ready_stage(tmp_path: Path) -> None:
+    workspace = _parsed_requirements_workspace(tmp_path)
+    manifest = load_manifest(workspace)
+    write_json(
+        workspace / "source" / "authoring-requirements.json",
+        make_authoring_requirements(manifest.source_sha256),
+    )
+    requirements_result = runner.invoke(
+        app, ["validate-requirements", str(workspace)]
+    )
+    assert requirements_result.exit_code == 0
+
+    write_json(
+        workspace / "source" / "paper-ir.json",
+        read_json(FIXTURES / "valid-paper-ir.json"),
+    )
+    result = runner.invoke(app, ["validate-ir", str(workspace)])
+
+    assert result.exit_code == 0
+    assert "Paper IR valid." in result.stdout
+    assert load_manifest(workspace).stage == WorkflowStage.IR_READY
