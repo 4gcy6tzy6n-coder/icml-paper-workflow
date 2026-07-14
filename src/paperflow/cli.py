@@ -117,3 +117,39 @@ def parse(
         "Next semantic step: read source/parsed-paper.md and write "
         "source/paper-ir.json according to the installed Skill."
     )
+
+
+@app.command()
+def build_evidence(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Build the evidence map and semantic authoring packet from a parsed document."""
+    from paperflow.evidence.builder import build_evidence_map
+    from paperflow.evidence.locator import build_semantic_packet
+    from paperflow.models.document import ParsedDocument
+    from paperflow.paths import WorkspacePaths
+    from paperflow.util.jsonio import read_json, write_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage not in (WorkflowStage.PARSED, WorkflowStage.IR_READY):
+        raise InvalidStageError(
+            f"Expected stage 'parsed' but workspace is at '{manifest.stage.value}'. "
+            f"Run `paperflow parse` first."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+    doc_data = read_json(ws_paths.parsed_document)
+    document = ParsedDocument.model_validate(doc_data)
+
+    evidence = build_evidence_map(document)
+    write_json(ws_paths.evidence_map, [ev.model_dump(mode="json") for ev in evidence])
+
+    packet = build_semantic_packet(document, evidence, ws_paths.paper_ir)
+    packet_path = ws_paths.source_dir / "semantic-packet.md"
+    packet_path.write_text(packet, encoding="utf-8")
+
+    typer.echo(f"Evidence map built: {len(evidence)} references")
+    typer.echo(f"Semantic packet: {packet_path}")
+    typer.echo("Next: Author source/paper-ir.json, then run `paperflow validate-ir`.")
