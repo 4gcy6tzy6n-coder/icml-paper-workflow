@@ -1,3 +1,8 @@
+---
+name: icml-paper-to-report-deck
+description: Use when converting one local English machine-learning research paper PDF into a source-grounded Chinese academic report, presentation, or both.
+---
+
 # ICML Paper to Report and Deck
 
 Convert one English ICML-style paper PDF into a source-grounded Chinese academic report (`.qmd`, `.docx`, `.pdf`) and an editable Chinese presentation (`.pptx`, `.pdf`, speaker notes), with shared evidence, deterministic rendering, and mandatory content/visual QA.
@@ -50,7 +55,17 @@ uv run paperflow build-evidence .work/<paper-name>
 
 Generates `source/evidence-map.json` and `source/semantic-packet.md`.
 
-### 3. Paper IR Authoring
+### 3. Authoring Requirements Intake
+
+Read `references/requirements-intake.md` completely. Ask one question at a time, resolve all fixed and adaptive topics, present the complete summary, and obtain explicit confirmation. Then write `source/authoring-requirements.json` and run:
+
+```bash
+uv run paperflow validate-requirements .work/<paper-name>
+```
+
+Do not begin Paper IR authoring until this command passes and the workspace reaches `REQUIREMENTS_READY`. Both report and slide authoring must read `source/authoring-requirements.json` and `source/paper-ir.json`.
+
+### 4. Paper IR Authoring
 
 **Read the following files:**
 
@@ -71,7 +86,7 @@ Follow the instructions in `references/paper-ir-authoring.md`:
 
 Write to `source/paper-ir.draft.json`, review against evidence, then rename to `source/paper-ir.json`.
 
-### 4. IR Validation Loop
+### 5. IR Validation Loop
 
 ```bash
 uv run paperflow validate-ir .work/<paper-name>
@@ -79,7 +94,7 @@ uv run paperflow validate-ir .work/<paper-name>
 
 On failure (exit code 4), read the errors in `qa/ir-validation.json`, fix `source/paper-ir.json`, and retry. Repeat until zero errors. On success, advances to `IR_READY`.
 
-### 5. Report Outline and Full Prose
+### 6. Report Outline and Full Prose
 
 **Two-stage writing:**
 
@@ -108,7 +123,7 @@ uv run paperflow validate-report .work/<paper-name>
 
 On success, advances to `REPORT_READY`.
 
-### 6. Storyboard Authoring
+### 7. Storyboard Authoring
 
 Write `slides/storyboard.json` following `references/slide-storytelling.md`:
 
@@ -127,7 +142,7 @@ uv run paperflow validate-storyboard .work/<paper-name>
 
 On success, advances to `STORYBOARD_READY`.
 
-### 7. Deterministic Render
+### 8. Deterministic Render
 
 **Report rendering:**
 ```bash
@@ -147,7 +162,7 @@ Generates `slides/presentation.pptx` and `slides/speaker-notes.md`. PPTX text, t
 
 On success, advances to `RENDERED`.
 
-### 8. Content QA
+### 9. Content QA
 
 ```bash
 uv run paperflow qa-content .work/<paper-name>
@@ -161,7 +176,7 @@ Checks:
 
 On success, advances to `CONTENT_QA_PASSED`.
 
-### 9. Visual QA with Mandatory Fix Cycle
+### 10. Visual QA with Mandatory Fix Cycle
 
 **Step 1 — Render previews:**
 ```bash
@@ -194,7 +209,7 @@ uv run paperflow validate-visual-review .work/<paper-name>
 
 On success, advances to `VISUAL_QA_PASSED`.
 
-### 10. Finalization
+### 11. Finalization
 
 ```bash
 uv run paperflow finalize .work/<paper-name>
@@ -202,15 +217,16 @@ uv run paperflow finalize .work/<paper-name>
 
 Copies all verified artifacts to `dist/<paper-slug>/` and writes `qa/final-manifest.json` with checksums, tool versions, and QA results.
 
-### 11. Failure and Resume
+### 12. Failure and Resume
 
 - If any command fails, read the error message and fix the source artifacts (not the QA files).
 - The state machine prevents running commands out of order.
 - Resume from the current valid stage: check `uv run paperflow status .work/<paper-name>`.
 
-### 12. Completion Message
+### 13. Completion Message
 
 When finalization succeeds, report:
+- Confirmation that `validate-requirements` passed and the confirmed requirements governed both artifacts.
 - Paper title and slug.
 - Output paths under `dist/<paper-slug>/`.
 - Evidence coverage percentage.

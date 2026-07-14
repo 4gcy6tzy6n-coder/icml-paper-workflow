@@ -5,7 +5,7 @@
 The workflow progresses through these exact stages:
 
 ```
-INITIALIZED → PARSED → IR_READY → REPORT_READY → STORYBOARD_READY → RENDERED → CONTENT_QA_PASSED → VISUAL_QA_PASSED → FINALIZED
+INITIALIZED -> PARSED -> REQUIREMENTS_READY -> IR_READY -> REPORT_READY -> STORYBOARD_READY -> RENDERED -> CONTENT_QA_PASSED -> VISUAL_QA_PASSED -> FINALIZED
 ```
 
 Each stage transition is enforced by the `paperflow` CLI. Attempting a command at the wrong stage exits with code 2.
@@ -16,8 +16,10 @@ Each stage transition is enforced by the `paperflow` CLI. Attempting a command a
 |-------|---------|--------|
 | Any | `paperflow init PDF WORKSPACE` | Initialize workspace |
 | INITIALIZED | `paperflow parse WORKSPACE` | Parse PDF, extract assets |
-| PARSED | (Claude authors `paper-ir.json`) | Semantic interpretation |
-| PARSED | `paperflow validate-ir WORKSPACE` | Validate IR → IR_READY |
+| PARSED | Skill completes the requirements interview | Ask one question at a time and obtain explicit confirmation |
+| PARSED | `paperflow validate-requirements WORKSPACE` | Validate `authoring-requirements.json` -> REQUIREMENTS_READY |
+| REQUIREMENTS_READY | Skill authors `paper-ir.json` | Semantic interpretation from confirmed requirements and evidence |
+| REQUIREMENTS_READY | `paperflow validate-ir WORKSPACE` | Validate IR -> IR_READY |
 | IR_READY | (Claude authors report and storyboard) | Prose and slide design |
 | IR_READY | `paperflow scaffold-report WORKSPACE` | Create report outline |
 | REPORT_READY | `paperflow render-report WORKSPACE` | Render DOCX/PDF |
