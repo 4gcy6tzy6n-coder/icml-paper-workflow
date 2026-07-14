@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-import fitz
+import fitz  # type: ignore[import-untyped]
 
 from paperflow.models.common import AssetType
 from paperflow.models.document import DocumentAsset, ParsedDocument
@@ -76,14 +76,13 @@ class AssetExtractor:
 
             # Crop region: for figures, area above caption; for tables, caption + area below
             if block.bbox:
-                x0, y0, x1, y1 = block.bbox
-                crop_bbox = (
-                    (x0, y0 - 100, x1, y1 + 200)
+                b = block.bbox
+                x0, y0, x1, y1 = float(b[0]), float(b[1]), float(b[2]), float(b[3])
+                crop_bbox: tuple[float, float, float, float] = (
+                    (x0, max(0.0, y0 - 100), x1, y1 + 200)
                     if is_table
-                    else (x0, y0 - 250, x1, y0)
+                    else (x0, max(0.0, y0 - 250), x1, y0)
                 )
-
-                crop_bbox = tuple(max(0, v) for v in crop_bbox)
                 crop_path = self._crop_page(
                     block.page, crop_bbox, asset_type, asset_id
                 )

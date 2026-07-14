@@ -30,7 +30,7 @@ class FakeDocumentParser:
         )
 
 
-def select_parser_chain(config) -> list[DocumentParser]:
+def select_parser_chain(config: object) -> list[DocumentParser]:
     """Select available parsers in preferred order from config."""
     from paperflow.ingest.markitdown_parser import MarkItDownParser
     from paperflow.ingest.mineru_parser import MinerUParser

@@ -9,7 +9,7 @@ class MarkItDownParser:
 
     def available(self) -> bool:
         try:
-            import markitdown  # noqa: F401
+            import markitdown  # type: ignore[import-not-found]  # noqa: F401
 
             return True
         except ImportError:

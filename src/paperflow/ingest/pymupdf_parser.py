@@ -1,6 +1,6 @@
 from pathlib import Path
 
-import fitz
+import fitz  # type: ignore[import-untyped]
 
 from paperflow.models.document import ParsedDocument, TextBlock
 from paperflow.util.hashing import sha256_file
@@ -41,8 +41,17 @@ class PyMuPDFParser:
                     continue
                 page_block_count += 1
                 block_id = f"p{page_num + 1:02d}-b{block_idx + 1:03d}"
-                bbox_raw = raw[:4] if isinstance(raw, (tuple, list)) and len(raw) >= 4 else None
-                bbox = tuple(float(v) for v in bbox_raw) if bbox_raw else None
+                bbox_raw: tuple[float, ...] | None = None
+                if isinstance(raw, (tuple, list)) and len(raw) >= 4:
+                    bbox_raw = (float(raw[0]), float(raw[1]), float(raw[2]), float(raw[3]))
+                bbox: tuple[float, float, float, float] | None = None
+                if bbox_raw is not None and len(bbox_raw) == 4:
+                    bbox = (
+                        float(bbox_raw[0]),
+                        float(bbox_raw[1]),
+                        float(bbox_raw[2]),
+                        float(bbox_raw[3]),
+                    )
 
                 blocks.append(
                     TextBlock(

@@ -1,5 +1,6 @@
 import json
 from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -217,7 +218,7 @@ def validate_ir(
     typer.echo("Next: author report/report-outline.json and report/academic-report.qmd.")
 
 
-def _compute_coverage(ir) -> float:
+def _compute_coverage(ir: Any) -> float:
     total_claims = (
         len(ir.contributions)
         + len(ir.findings)
