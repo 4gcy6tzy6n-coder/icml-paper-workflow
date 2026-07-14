@@ -1,0 +1,10 @@
+---
+title: "{{TITLE}}"
+format:
+  docx:
+    toc: true
+    number-sections: true
+lang: zh-CN
+---
+
+{{CONTENT}}

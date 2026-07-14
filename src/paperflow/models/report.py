@@ -7,7 +7,7 @@ class ReportSectionPlan(BaseModel):
     section_id: str
     title: str
     purpose: str
-    evidence_ids: list[str] = Field(min_length=1)
+    evidence_ids: list[str] = Field(default_factory=list)
     target_words: int = Field(ge=80, le=1500)
 
 

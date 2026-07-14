@@ -243,3 +243,93 @@ def _compute_coverage(ir: Any) -> float:
     covered += 1  # research problem
     covered += 1  # experimental setup
     return min(1.0, covered / total_claims)
+
+
+@app.command()
+def scaffold_report(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Scaffold a report outline and QMD template from a validated Paper IR."""
+    from paperflow.models.paper_ir import PaperIR
+    from paperflow.paths import WorkspacePaths
+    from paperflow.report.scaffold import scaffold_outline, scaffold_qmd
+    from paperflow.util.jsonio import read_json, write_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.IR_READY:
+        raise InvalidStageError(
+            f"Expected stage 'ir_ready' but workspace is at '{manifest.stage.value}'. "
+            f"Run `paperflow validate-ir` first."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+    ir_data = read_json(ws_paths.paper_ir)
+    ir = PaperIR.model_validate(ir_data)
+
+    outline = scaffold_outline(ir.metadata.title)
+    outline_path = ws_paths.report_dir / "report-outline.json"
+    write_json(outline_path, outline.model_dump(mode="json"))
+
+    scaffold_qmd(outline, ws_paths.report_qmd)
+
+    typer.echo(f"Outline: {outline_path}")
+    typer.echo(f"QMD scaffold: {ws_paths.report_qmd}")
+    typer.echo(f"Next: fill in full prose in {ws_paths.report_qmd}, ")
+    typer.echo("then run `paperflow validate-report`.")
+
+
+@app.command()
+def validate_report(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Validate a completed report QMD against evidence and style rules."""
+    from paperflow.models.paper_ir import PaperIR
+    from paperflow.paths import WorkspacePaths
+    from paperflow.report.validator import validate_report_qmd
+    from paperflow.util.jsonio import read_json, write_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.IR_READY:
+        raise InvalidStageError(
+            f"Expected stage 'ir_ready' but workspace is at '{manifest.stage.value}'. "
+            f"Complete report authoring first."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+    if not ws_paths.report_qmd.exists():
+        typer.echo(f"Error: {ws_paths.report_qmd} not found.", err=True)
+        raise typer.Exit(code=4)
+
+    ir_data = read_json(ws_paths.paper_ir)
+    ir = PaperIR.model_validate(ir_data)
+    evidence = ir.evidence
+
+    issues = validate_report_qmd(ws_paths.report_qmd, evidence)
+    errors = [i for i in issues if i.severity == "error"]
+    warnings = [i for i in issues if i.severity == "warning"]
+
+    qa_path = ws_paths.qa_dir / "report-validation.json"
+    ws_paths.qa_dir.mkdir(parents=True, exist_ok=True)
+    write_json(
+        qa_path,
+        {
+            "passed": len(errors) == 0,
+            "issues": [i.model_dump(mode="json") for i in issues],
+        },
+    )
+
+    if errors:
+        typer.echo(f"Report invalid: {len(errors)} error(s), {len(warnings)} warning(s)")
+        for e in errors:
+            typer.echo(f"  [{e.code}] {e.message}")
+        raise typer.Exit(code=4)
+
+    advance_stage(ws, WorkflowStage.IR_READY, WorkflowStage.REPORT_READY)
+
+    typer.echo("Report validation: PASS")
+    typer.echo("Stage: report_ready")
+    typer.echo("Next: author slides/storyboard.json and run `paperflow validate-storyboard`.")

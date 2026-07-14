@@ -1,0 +1,14 @@
+project:
+  type: default
+
+format:
+  docx:
+    toc: true
+    number-sections: true
+    lang: zh-CN
+  pdf:
+    toc: true
+    number-sections: true
+    lang: zh-CN
+
+lang: zh-CN
