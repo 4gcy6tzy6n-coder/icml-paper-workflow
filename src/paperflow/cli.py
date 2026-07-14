@@ -4,7 +4,10 @@ from pathlib import Path
 import typer
 
 from paperflow import __version__
-from paperflow.manifest import create_manifest, load_manifest
+from paperflow.errors import InvalidStageError
+from paperflow.ingest.parser_chain import parse_with_fallback, select_parser_chain
+from paperflow.manifest import advance_stage, create_manifest, load_manifest, save_manifest
+from paperflow.models.common import WorkflowStage
 
 app = typer.Typer(no_args_is_help=True)
 
@@ -63,3 +66,54 @@ def status(
         typer.echo(f"Workspace: {ws}")
         typer.echo(f"Stage: {manifest.stage.value}")
         typer.echo(f"Source PDF: {manifest.source_pdf}")
+
+
+@app.command()
+def parse(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Parse the source PDF into a structured document."""
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.INITIALIZED:
+        raise InvalidStageError(
+            f"Expected stage 'initialized' but workspace is at '{manifest.stage.value}'. "
+            f"Was `paperflow init` already run?"
+        )
+
+    config = manifest.config
+    chain = select_parser_chain(config)
+    if not chain:
+        typer.echo(
+            "Error: No parsers are available. Install PyMuPDF (`pip install pymupdf`) "
+            "or an optional parser.",
+            err=True,
+        )
+        raise typer.Exit(code=3)
+
+    source_pdf = Path(manifest.source_pdf)
+    doc, fallbacks, parser_used = parse_with_fallback(source_pdf, ws, chain)
+
+    manifest = load_manifest(ws)
+    manifest = manifest.model_copy(
+        update={
+            "parser_used": parser_used,
+            "fallbacks": fallbacks,
+            "warnings": list(manifest.warnings) + doc.warnings,
+        }
+    )
+    save_manifest(ws, manifest)
+    advance_stage(ws, WorkflowStage.INITIALIZED, WorkflowStage.PARSED)
+
+    typer.echo(f"Parser used: {parser_used}")
+    if doc.warnings:
+        typer.echo(f"Warnings: {len(doc.warnings)}")
+        for w in doc.warnings:
+            typer.echo(f"  - {w}")
+    if fallbacks:
+        typer.echo(f"Fallbacks attempted: {', '.join(fallbacks)}")
+    typer.echo(
+        "Next semantic step: read source/parsed-paper.md and write "
+        "source/paper-ir.json according to the installed Skill."
+    )
