@@ -333,3 +333,37 @@ def validate_report(
     typer.echo("Report validation: PASS")
     typer.echo("Stage: report_ready")
     typer.echo("Next: author slides/storyboard.json and run `paperflow validate-storyboard`.")
+
+
+@app.command()
+def render_report(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Render the validated report QMD to DOCX and PDF."""
+    from paperflow.report.renderer import render_report as render_report_impl
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.REPORT_READY:
+        raise InvalidStageError(
+            f"Expected stage 'report_ready' but workspace is at '{manifest.stage.value}'. "
+            f"Run `paperflow validate-report` first."
+        )
+
+    result = render_report_impl(ws)
+
+    if not result.success:
+        typer.echo("Report rendering failed:", err=True)
+        for w in result.warnings:
+            typer.echo(f"  {w}", err=True)
+        raise typer.Exit(code=3)
+
+    for p in result.output_paths:
+        typer.echo(f"  {p}")
+
+    if result.warnings:
+        for w in result.warnings:
+            typer.echo(f"Warning: {w}")
+
+    typer.echo("Report rendered successfully.")
