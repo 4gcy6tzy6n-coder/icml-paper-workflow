@@ -153,3 +153,92 @@ def build_evidence(
     typer.echo(f"Evidence map built: {len(evidence)} references")
     typer.echo(f"Semantic packet: {packet_path}")
     typer.echo("Next: Author source/paper-ir.json, then run `paperflow validate-ir`.")
+
+
+@app.command()
+def validate_ir(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+) -> None:
+    """Validate a Paper IR file against evidence coverage gates."""
+    from paperflow.evidence.validator import validate_paper_ir
+    from paperflow.models.paper_ir import PaperIR
+    from paperflow.paths import WorkspacePaths
+    from paperflow.util.jsonio import read_json
+
+    ws = Path(workspace).resolve()
+    manifest = load_manifest(ws)
+
+    if manifest.stage not in (WorkflowStage.PARSED, WorkflowStage.IR_READY):
+        raise InvalidStageError(
+            f"Expected stage 'parsed' but workspace is at '{manifest.stage.value}'."
+        )
+
+    ws_paths = WorkspacePaths(ws)
+
+    if not ws_paths.paper_ir.exists():
+        typer.echo(f"Error: {ws_paths.paper_ir} not found.", err=True)
+        raise typer.Exit(code=4)
+
+    ir_data = read_json(ws_paths.paper_ir)
+    ir = PaperIR.model_validate(ir_data)
+
+    issues = validate_paper_ir(ir, ir.evidence)
+    errors = [i for i in issues if i.severity == "error"]
+    warnings = [i for i in issues if i.severity == "warning"]
+
+    qa_dir = ws / "qa"
+    qa_dir.mkdir(parents=True, exist_ok=True)
+    qa_path = qa_dir / "ir-validation.json"
+
+    from paperflow.util.jsonio import write_json
+    write_json(
+        qa_path,
+        {
+            "passed": len(errors) == 0,
+            "issues": [i.model_dump(mode="json") for i in issues],
+            "evidence_coverage": _compute_coverage(ir),
+        },
+    )
+
+    if errors:
+        typer.echo(f"Paper IR invalid: {len(errors)} error(s), {len(warnings)} warning(s)")
+        for e in errors:
+            typer.echo(f"  [{e.code}] {e.message}")
+        for w in warnings:
+            typer.echo(f"  [{w.code}] (warning) {w.message}")
+        raise typer.Exit(code=4)
+
+    advance_stage(ws, manifest.stage, WorkflowStage.IR_READY)
+
+    coverage = _compute_coverage(ir)
+    typer.echo("Paper IR valid.")
+    typer.echo(f"Evidence coverage: {coverage:.0%}")
+    typer.echo("Stage: ir_ready")
+    typer.echo("Next: author report/report-outline.json and report/academic-report.qmd.")
+
+
+def _compute_coverage(ir) -> float:
+    total_claims = (
+        len(ir.contributions)
+        + len(ir.findings)
+        + len(ir.numeric_results)
+        + len(ir.limitations)
+        + 1  # research problem
+        + 1  # experimental setup
+    )
+    if total_claims == 0:
+        return 0.0
+    ev_ids = {ev.id for ev in ir.evidence}
+    covered = 0
+    for section in [
+        ir.contributions,
+        ir.findings,
+        ir.numeric_results,
+        ir.limitations,
+    ]:
+        for claim in section:
+            if any(eid in ev_ids for eid in claim.evidence_ids):
+                covered += 1
+    covered += 1  # research problem
+    covered += 1  # experimental setup
+    return min(1.0, covered / total_claims)
