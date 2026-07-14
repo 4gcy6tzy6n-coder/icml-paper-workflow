@@ -10,6 +10,7 @@ import pytest
 
 from paperflow.errors import ExternalToolError
 from paperflow.ingest.mineru_api_parser import MinerUApiParser
+from paperflow.util.hashing import sha256_file
 
 
 class _Response:
@@ -157,6 +158,44 @@ def test_parse_uploads_downloads_and_normalizes_json(
     assert all(request.get_method() != "PUT" for request in requests)
 
 
+def test_each_parse_uses_unique_data_id_for_same_pdf(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setenv("MINERU_API_KEY", "test-key")
+    pdf = _pdf(tmp_path)
+    opener_one, requests_one = _success_opener(_result_zip())
+    opener_two, requests_two = _success_opener(_result_zip())
+
+    MinerUApiParser(
+        opener=opener_one,
+        uploader=lambda *_: None,
+        sleeper=lambda _: None,
+    ).parse(pdf, tmp_path / "workspace-one")
+    MinerUApiParser(
+        opener=opener_two,
+        uploader=lambda *_: None,
+        sleeper=lambda _: None,
+    ).parse(pdf, tmp_path / "workspace-two")
+
+    def data_id(requests: list[Request]) -> str:
+        post = next(request for request in requests if request.get_method() == "POST")
+        assert post.data is not None
+        payload = json.loads(post.data.decode("utf-8"))
+        return str(payload["files"][0]["data_id"])
+
+    first_id = data_id(requests_one)
+    second_id = data_id(requests_two)
+    assert first_id != second_id
+    pdf_sha256 = sha256_file(pdf)
+    for value in (first_id, second_id):
+        assert len(value) == 97
+        assert len(value) <= 128
+        prefix, suffix = value.rsplit("-", 1)
+        assert prefix == pdf_sha256
+        assert len(suffix) == 32
+        assert all(character in "0123456789abcdef" for character in suffix)
+
+
 def test_parse_rejects_archive_without_json(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -282,7 +321,9 @@ def test_poll_timeout_is_a_wall_clock_deadline(
         ).parse(_pdf(tmp_path), tmp_path / "workspace")
 
 
-def test_upload_transport_sends_no_content_type_or_authorization(tmp_path: Path) -> None:
+def test_upload_transport_sends_pdf_content_type_without_authorization(
+    tmp_path: Path,
+) -> None:
     from paperflow.ingest.mineru_api_parser import _upload_file
 
     pdf = _pdf(tmp_path)
@@ -330,7 +371,7 @@ def test_upload_transport_sends_no_content_type_or_authorization(tmp_path: Path)
 
     assert sent == pdf.read_bytes()
     assert headers["content-length"] == str(pdf.stat().st_size)
-    assert "content-type" not in headers
+    assert headers["content-type"] == "application/pdf"
     assert "authorization" not in headers
 
 
@@ -409,3 +450,59 @@ def test_archive_total_json_size_is_bounded(
 
     with pytest.raises(ExternalToolError, match="JSON exceeds the size limit"):
         MinerUApiParser._extract_json(buffer.getvalue(), tmp_path / "extracted")
+
+
+def test_normalization_prefers_standard_content_list_over_v2(
+    tmp_path: Path,
+) -> None:
+    standard = tmp_path / "paper_content_list.json"
+    standard.write_text(
+        json.dumps(
+            [
+                {"text": "Page one", "page_idx": 0},
+                {"text": "Page two", "page_idx": 1},
+            ]
+        ),
+        encoding="utf-8",
+    )
+    v2 = tmp_path / "paper_content_list_v2.json"
+    v2.write_text(json.dumps([[{"text": "Duplicate"}]]), encoding="utf-8")
+
+    blocks = MinerUApiParser._normalize_blocks([standard, v2])
+
+    assert [block.text for block in blocks] == ["Page one", "Page two"]
+    assert [block.page for block in blocks] == [1, 2]
+
+
+def test_v2_content_list_uses_top_level_index_as_page_number(tmp_path: Path) -> None:
+    v2 = tmp_path / "paper_content_list_v2.json"
+    v2.write_text(
+        json.dumps([[{"text": "Page one"}], [{"text": "Page two"}]]),
+        encoding="utf-8",
+    )
+
+    blocks = MinerUApiParser._normalize_blocks([v2])
+
+    assert [block.page for block in blocks] == [1, 2]
+
+
+def test_empty_standard_content_list_falls_back_to_v2(tmp_path: Path) -> None:
+    standard = tmp_path / "paper_content_list.json"
+    standard.write_text("[]", encoding="utf-8")
+    v2 = tmp_path / "paper_content_list_v2.json"
+    v2.write_text(json.dumps([[{"text": "Recovered"}]]), encoding="utf-8")
+
+    blocks = MinerUApiParser._normalize_blocks([standard, v2])
+
+    assert [block.text for block in blocks] == ["Recovered"]
+
+
+def test_malformed_standard_content_list_falls_back_to_v2(tmp_path: Path) -> None:
+    standard = tmp_path / "paper_content_list.json"
+    standard.write_text("not-json", encoding="utf-8")
+    v2 = tmp_path / "paper_content_list_v2.json"
+    v2.write_text(json.dumps([[{"text": "Recovered"}]]), encoding="utf-8")
+
+    blocks = MinerUApiParser._normalize_blocks([standard, v2])
+
+    assert [block.text for block in blocks] == ["Recovered"]

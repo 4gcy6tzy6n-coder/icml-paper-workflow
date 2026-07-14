@@ -5,6 +5,7 @@ import io
 import json
 import os
 import time
+import uuid
 import zipfile
 from collections.abc import Callable, Iterator
 from pathlib import Path, PurePosixPath
@@ -78,7 +79,7 @@ def _upload_file(
     *,
     connection_factory: _ConnectionFactory = _https_connection,
 ) -> None:
-    """PUT raw bytes to a signed HTTPS URL without content type or auth headers."""
+    """PUT a PDF with its signed MIME type and without an auth header."""
     target = urlsplit(url)
     if target.scheme != "https" or not target.hostname:
         raise ExternalToolError("MinerU API returned an invalid upload URL.")
@@ -90,6 +91,7 @@ def _upload_file(
     try:
         connection.putrequest("PUT", request_target, skip_accept_encoding=True)
         connection.putheader("Content-Length", str(pdf_path.stat().st_size))
+        connection.putheader("Content-Type", "application/pdf")
         connection.endheaders()
         with pdf_path.open("rb") as source:
             while chunk := source.read(1024 * 1024):
@@ -143,8 +145,14 @@ class MinerUApiParser:
         if not pdf_path.is_file():
             raise ExternalToolError("MinerU API input PDF does not exist.")
 
+        pdf_sha256 = sha256_file(pdf_path)
         request_payload = {
-            "files": [{"name": pdf_path.name, "data_id": sha256_file(pdf_path)}],
+            "files": [
+                {
+                    "name": pdf_path.name,
+                    "data_id": f"{pdf_sha256}-{uuid.uuid4().hex}",
+                }
+            ],
             "model_version": "pipeline",
         }
         upload_response = self._request_json(
@@ -364,15 +372,49 @@ class MinerUApiParser:
 
     @classmethod
     def _normalize_blocks(cls, json_paths: list[Path]) -> list[TextBlock]:
-        preferred = [path for path in json_paths if "content_list" in path.name]
-        sources = preferred or json_paths
+        standard_content_lists = [
+            path
+            for path in json_paths
+            if path.name == "content_list.json"
+            or path.name.endswith("_content_list.json")
+        ]
+        all_content_lists = [
+            path for path in json_paths if "content_list" in path.name
+        ]
+        fallback_content_lists = [
+            path for path in all_content_lists if path not in standard_content_lists
+        ]
+        generic_json = [
+            path for path in json_paths if path not in all_content_lists
+        ]
+        source_tiers = [
+            standard_content_lists,
+            fallback_content_lists,
+            generic_json,
+        ]
         raw_blocks: list[tuple[int, str, tuple[float, float, float, float] | None]] = []
-        for path in sorted(sources):
-            try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-                continue
-            raw_blocks.extend(cls._walk_text(payload, page_hint=1))
+        for sources in source_tiers:
+            tier_blocks: list[
+                tuple[int, str, tuple[float, float, float, float] | None]
+            ] = []
+            for path in sorted(sources):
+                try:
+                    payload = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                is_v2 = path.name == "content_list_v2.json" or path.name.endswith(
+                    "_content_list_v2.json"
+                )
+                if is_v2 and isinstance(payload, list):
+                    for page_index, page_payload in enumerate(payload):
+                        tier_blocks.extend(
+                            cls._walk_text(page_payload, page_hint=page_index + 1)
+                        )
+                else:
+                    tier_blocks.extend(cls._walk_text(payload, page_hint=1))
+            if tier_blocks:
+                raw_blocks = tier_blocks
+                break
 
         blocks: list[TextBlock] = []
         for index, (page, text, bbox) in enumerate(raw_blocks):
