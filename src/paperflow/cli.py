@@ -624,3 +624,36 @@ def validate_visual_review(
     typer.echo(f"Fix cycles: {review.get('inspection_pass', 0)}")
     typer.echo("Stage: visual_qa_passed")
     typer.echo("Next: run `paperflow finalize`.")
+
+
+@app.command()
+def finalize(
+    workspace: str = typer.Argument(..., help="Workspace directory"),
+    dist: str = typer.Option("dist", "--dist", help="Output distribution directory"),
+) -> None:
+    """Finalize and copy all verified artifacts to the distribution directory."""
+    from paperflow.qa.finalize import finalize_workspace
+
+    ws = Path(workspace).resolve()
+    dist_dir = Path(dist).resolve()
+
+    manifest = load_manifest(ws)
+
+    if manifest.stage != WorkflowStage.VISUAL_QA_PASSED:
+        raise InvalidStageError(
+            f"Expected stage 'visual_qa_passed' but workspace is at "
+            f"'{manifest.stage.value}'. Run `paperflow validate-visual-review` first."
+        )
+
+    try:
+        outputs = finalize_workspace(ws, dist_dir)
+    except FileNotFoundError as e:
+        typer.echo(f"Finalization failed: {e}", err=True)
+        raise typer.Exit(code=1) from None
+
+    advance_stage(ws, WorkflowStage.VISUAL_QA_PASSED, WorkflowStage.FINALIZED)
+
+    typer.echo(f"Finalized: {dist_dir}")
+    for p in outputs:
+        typer.echo(f"  {p.relative_to(dist_dir)}")
+    typer.echo("Final manifest: qa/final-manifest.json")
