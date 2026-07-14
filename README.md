@@ -33,6 +33,12 @@ and complete every validation and visual QA gate.
 
 ## How It Works
 
+After parsing and evidence extraction, the project skill asks one requirements question at a time. It covers the fixed core topics, asks paper-specific follow-ups, presents one complete summary, and requires explicit confirmation before writing source/authoring-requirements.json.
+
+    paperflow validate-requirements WORKSPACE
+
+The report and presentation both consume the confirmed authoring requirements and the canonical paper-ir.json. A parsed workspace cannot validate a Paper IR until requirements validation reaches requirements_ready.
+
 ```
 paper.pdf
   │
@@ -70,6 +76,7 @@ paper.pdf
 paperflow init PDF WORKSPACE          # Initialize workspace
 paperflow parse WORKSPACE             # Parse PDF (MinerU API→local fallbacks)
 paperflow build-evidence WORKSPACE    # Build evidence map
+paperflow validate-requirements WORKSPACE  # Validate confirmed requirements
 paperflow validate-ir WORKSPACE       # Validate Paper IR
 paperflow scaffold-report WORKSPACE   # Create report outline
 paperflow validate-report WORKSPACE   # Validate report QMD

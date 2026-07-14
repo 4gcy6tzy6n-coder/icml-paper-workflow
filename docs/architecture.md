@@ -19,11 +19,16 @@ util/           Shared helpers (JSON I/O, hashing, commands).
 ## State Machine
 
 ```
-INITIALIZED → PARSED → IR_READY → REPORT_READY → STORYBOARD_READY
-    → RENDERED → CONTENT_QA_PASSED → VISUAL_QA_PASSED → FINALIZED
+INITIALIZED -> PARSED -> REQUIREMENTS_READY -> IR_READY -> REPORT_READY
+    -> STORYBOARD_READY -> RENDERED -> CONTENT_QA_PASSED
+    -> VISUAL_QA_PASSED -> FINALIZED
 ```
 
 Each transition is enforced by the `paperflow` CLI. Invalid transitions exit with code 2 and do not modify the workspace.
+
+## Authoring Requirements Gate
+
+The project skill owns conversational intake and asks one question at a time. Deterministic code validates source/authoring-requirements.json; it does not interview the user or invent missing answers. confirmation.content_sha256 binds the confirmation to canonical requirements content, and source.pdf_sha256 binds the record to manifest.json. Missing, invalid, edited, or wrong-paper requirements produce qa/requirements-validation.json and leave the workflow stage unchanged.
 
 ## Canonical Data Flow
 
