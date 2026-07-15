@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+from paperflow.models.authoring_requirements import PositiveRange
 from paperflow.models.common import Severity
 from paperflow.models.paper_ir import EvidenceRef
 from paperflow.models.qa import ValidationIssue
@@ -32,7 +33,9 @@ _REQUIRED_SECTIONS = [
 
 
 def validate_report_qmd(
-    qmd_path: Path, evidence: list[EvidenceRef]
+    qmd_path: Path,
+    evidence: list[EvidenceRef],
+    target_chinese_characters: PositiveRange | None = None,
 ) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
     content = qmd_path.read_text(encoding="utf-8")
@@ -42,8 +45,30 @@ def validate_report_qmd(
     _check_required_sections(content, issues)
     _check_placeholders(content, issues)
     _check_evidence_refs(content, ev_ids, issues)
+    if target_chinese_characters is not None:
+        _check_chinese_character_target(content, target_chinese_characters, issues)
 
     return issues
+
+
+def _check_chinese_character_target(
+    content: str,
+    target: PositiveRange,
+    issues: list[ValidationIssue],
+) -> None:
+    count = len(re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", content))
+    if count < target.minimum or count > target.maximum:
+        issues.append(
+            ValidationIssue(
+                code="REPORT_CHARACTER_TARGET_MISSED",
+                severity=Severity.ERROR,
+                message=(
+                    f"Report has {count} Chinese characters; confirmed target "
+                    f"{target.minimum}–{target.maximum}."
+                ),
+                location="report/academic-report.qmd",
+            )
+        )
 
 
 def _check_required_sections(content: str, issues: list[ValidationIssue]) -> None:

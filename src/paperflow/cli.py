@@ -8,9 +8,41 @@ from paperflow import __version__
 from paperflow.errors import InvalidStageError
 from paperflow.ingest.parser_chain import parse_with_fallback, select_parser_chain
 from paperflow.manifest import advance_stage, create_manifest, load_manifest, save_manifest
+from paperflow.models.authoring_requirements import AuthoringRequirements
 from paperflow.models.common import WorkflowStage
 
 app = typer.Typer(no_args_is_help=True)
+
+
+def _load_validated_requirements_or_exit(
+    workspace: Path,
+) -> AuthoringRequirements:
+    from paperflow.paths import WorkspacePaths
+    from paperflow.requirements.validator import load_validated_requirements
+    from paperflow.util.jsonio import write_json
+
+    manifest = load_manifest(workspace)
+    paths = WorkspacePaths(workspace)
+    requirements, issues = load_validated_requirements(
+        paths.authoring_requirements,
+        manifest.source_sha256,
+        manifest.validated_requirements_content_sha256,
+    )
+    errors = [issue for issue in issues if issue.severity == "error"]
+    write_json(
+        paths.qa_dir / "requirements-revalidation.json",
+        {
+            "passed": not errors,
+            "issues": [issue.model_dump(mode="json") for issue in issues],
+            "validated_content_sha256": manifest.validated_requirements_content_sha256,
+        },
+    )
+    if errors or requirements is None:
+        typer.echo(f"Requirements revalidation failed: {len(errors)} error(s)")
+        for error in errors:
+            typer.echo(f"  [{error.code}] {error.message}")
+        raise typer.Exit(code=4)
+    return requirements
 
 
 @app.callback(invoke_without_command=True)
@@ -153,11 +185,7 @@ def build_evidence(
     ws = Path(workspace).resolve()
     manifest = load_manifest(ws)
 
-    if manifest.stage not in (
-        WorkflowStage.PARSED,
-        WorkflowStage.REQUIREMENTS_READY,
-        WorkflowStage.IR_READY,
-    ):
+    if manifest.stage != WorkflowStage.PARSED:
         raise InvalidStageError(
             f"Expected a parsed workspace but workspace is at '{manifest.stage.value}'."
         )
@@ -170,7 +198,7 @@ def build_evidence(
     write_json(ws_paths.evidence_map, [ev.model_dump(mode="json") for ev in evidence])
 
     packet = build_semantic_packet(document, evidence, ws_paths.paper_ir)
-    packet_path = ws_paths.source_dir / "semantic-packet.md"
+    packet_path = ws_paths.semantic_packet
     packet_path.write_text(packet, encoding="utf-8")
 
     typer.echo(f"Evidence map built: {len(evidence)} references")
@@ -187,7 +215,10 @@ def validate_requirements(
 ) -> None:
     """Validate confirmed authoring requirements for this source PDF."""
     from paperflow.paths import WorkspacePaths
-    from paperflow.requirements.validator import validate_requirements_file
+    from paperflow.requirements.validator import (
+        validate_evidence_outputs,
+        validate_requirements_file,
+    )
     from paperflow.util.jsonio import write_json
 
     ws = Path(workspace).resolve()
@@ -203,6 +234,7 @@ def validate_requirements(
         paths.authoring_requirements,
         manifest.source_sha256,
     )
+    issues.extend(validate_evidence_outputs(paths.evidence_map, paths.semantic_packet))
     errors = [issue for issue in issues if issue.severity == "error"]
     write_json(
         paths.qa_dir / "requirements-validation.json",
@@ -217,6 +249,14 @@ def validate_requirements(
             typer.echo(f"  [{error.code}] {error.message}")
         raise typer.Exit(code=4)
 
+    manifest = manifest.model_copy(
+        update={
+            "validated_requirements_content_sha256": (
+                requirements.confirmation.content_sha256
+            )
+        }
+    )
+    save_manifest(ws, manifest)
     if manifest.stage == WorkflowStage.PARSED:
         advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY)
     typer.echo("Requirements validation: PASS")
@@ -245,6 +285,8 @@ def validate_ir(
             "Expected stage 'requirements_ready' but workspace is at "
             f"'{manifest.stage.value}'. Run paperflow validate-requirements first."
         )
+
+    _load_validated_requirements_or_exit(ws)
 
     ws_paths = WorkspacePaths(ws)
 
@@ -341,6 +383,8 @@ def scaffold_report(
             f"Run `paperflow validate-ir` first."
         )
 
+    _load_validated_requirements_or_exit(ws)
+
     ws_paths = WorkspacePaths(ws)
     ir_data = read_json(ws_paths.paper_ir)
     ir = PaperIR.model_validate(ir_data)
@@ -376,6 +420,8 @@ def validate_report(
             f"Complete report authoring first."
         )
 
+    requirements = _load_validated_requirements_or_exit(ws)
+
     ws_paths = WorkspacePaths(ws)
     if not ws_paths.report_qmd.exists():
         typer.echo(f"Error: {ws_paths.report_qmd} not found.", err=True)
@@ -385,7 +431,11 @@ def validate_report(
     ir = PaperIR.model_validate(ir_data)
     evidence = ir.evidence
 
-    issues = validate_report_qmd(ws_paths.report_qmd, evidence)
+    issues = validate_report_qmd(
+        ws_paths.report_qmd,
+        evidence,
+        requirements.report.target_chinese_characters,
+    )
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]
 
@@ -422,11 +472,18 @@ def render_report(
     ws = Path(workspace).resolve()
     manifest = load_manifest(ws)
 
-    if manifest.stage != WorkflowStage.REPORT_READY:
+    if manifest.stage not in (
+        WorkflowStage.REPORT_READY,
+        WorkflowStage.STORYBOARD_READY,
+        WorkflowStage.RENDERED,
+    ):
         raise InvalidStageError(
-            f"Expected stage 'report_ready' but workspace is at '{manifest.stage.value}'. "
-            f"Run `paperflow validate-report` first."
+            "Expected stage 'report_ready', 'storyboard_ready', or 'rendered' but "
+            f"workspace is at '{manifest.stage.value}'. Run `paperflow validate-report` "
+            "first."
         )
+
+    _load_validated_requirements_or_exit(ws)
 
     result = render_report_impl(ws)
 
@@ -465,6 +522,8 @@ def validate_storyboard(
             f"Author the storyboard first."
         )
 
+    requirements = _load_validated_requirements_or_exit(ws)
+
     ws_paths = WorkspacePaths(ws)
 
     if not ws_paths.storyboard.exists():
@@ -474,7 +533,7 @@ def validate_storyboard(
     sb_data = read_json(ws_paths.storyboard)
     storyboard = Storyboard.model_validate(sb_data)
 
-    issues = validate_storyboard(storyboard)
+    issues = validate_storyboard(storyboard, requirements.presentation.target_slides)
     errors = [i for i in issues if i.severity == "error"]
     warnings = [i for i in issues if i.severity == "warning"]
 
@@ -521,10 +580,12 @@ def render_slides(
             f"'{manifest.stage.value}'. Run `paperflow validate-storyboard` first."
         )
 
+    _load_validated_requirements_or_exit(ws)
+
     ws_paths = WorkspacePaths(ws)
 
     result = run_command(
-        ["pnpm", "paperflow:render-slides", "--", str(ws)],
+        ["pnpm", "paperflow:render-slides", str(ws)],
         timeout_s=120,
     )
 
@@ -565,7 +626,9 @@ def qa_content(
             f"'{manifest.stage.value}'. Run `paperflow render-slides` first."
         )
 
-    result = check_cross_artifact_consistency(ws)
+    requirements = _load_validated_requirements_or_exit(ws)
+
+    result = check_cross_artifact_consistency(ws, requirements)
     qa_dir = ws / "qa"
     qa_dir.mkdir(parents=True, exist_ok=True)
 
@@ -617,6 +680,8 @@ def render_preview(
             f"'{manifest.stage.value}'."
         )
 
+    _load_validated_requirements_or_exit(ws)
+
     ws_paths = WorkspacePaths(ws)
     if not ws_paths.deck_pptx.exists():
         typer.echo(f"Error: {ws_paths.deck_pptx} not found.", err=True)
@@ -665,6 +730,8 @@ def validate_visual_review(
             f"'{manifest.stage.value}'. Run `paperflow qa-content` first."
         )
 
+    _load_validated_requirements_or_exit(ws)
+
     ws_paths = WorkspacePaths(ws)
     review_path = ws_paths.qa_dir / "visual-review.json"
 
@@ -706,13 +773,12 @@ def validate_visual_review(
 @app.command()
 def finalize(
     workspace: str = typer.Argument(..., help="Workspace directory"),
-    dist: str = typer.Option("dist", "--dist", help="Output distribution directory"),
 ) -> None:
     """Finalize and copy all verified artifacts to the distribution directory."""
     from paperflow.qa.finalize import finalize_workspace
 
     ws = Path(workspace).resolve()
-    dist_dir = Path(dist).resolve()
+    dist_dir = Path("dist").resolve()
 
     manifest = load_manifest(ws)
 
@@ -722,11 +788,13 @@ def finalize(
             f"'{manifest.stage.value}'. Run `paperflow validate-visual-review` first."
         )
 
+    _load_validated_requirements_or_exit(ws)
+
     try:
         outputs = finalize_workspace(ws, dist_dir)
-    except FileNotFoundError as e:
+    except (FileNotFoundError, ValueError) as e:
         typer.echo(f"Finalization failed: {e}", err=True)
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(code=4) from None
 
     advance_stage(ws, WorkflowStage.VISUAL_QA_PASSED, WorkflowStage.FINALIZED)
 

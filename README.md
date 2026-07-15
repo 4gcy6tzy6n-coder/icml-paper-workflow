@@ -42,9 +42,15 @@ The report and presentation both consume the confirmed authoring requirements an
 ```
 paper.pdf
   │
-  ├─[parse]──→ parsed document + evidence map
+  ├─[parse + build-evidence]──→ parsed document + evidence map
   │
-  ├─[Claude]─→ paper-ir.json (canonical interpretation)
+  ├─[project skill]──→ one-question-at-a-time requirements intake
+  │                    → explicit confirmation
+  │                    → source/authoring-requirements.json
+  │
+  ├─[validate-requirements]──→ REQUIREMENTS_READY
+  │
+  ├─[project skill]──→ paper-ir.json (canonical interpretation)
   │
   ├─[validate-ir]──→ IR ready
   │

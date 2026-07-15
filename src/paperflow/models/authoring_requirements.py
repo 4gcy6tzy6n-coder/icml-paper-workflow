@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 NonBlankStr = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 Sha256Str = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
@@ -15,7 +15,11 @@ PresentationFormat = Literal["pptx", "slides_pdf", "speaker_notes"]
 DeliveryFormat = ReportFormat | PresentationFormat
 
 
-class PositiveRange(BaseModel):
+class RequirementsModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class PositiveRange(RequirementsModel):
     minimum: int = Field(ge=1)
     maximum: int = Field(ge=1)
 
@@ -26,107 +30,91 @@ class PositiveRange(BaseModel):
         return self
 
 
-class SourceRequirements(BaseModel):
+class SourceRequirements(RequirementsModel):
     pdf_sha256: Sha256Str
     title: NonBlankStr
 
 
-class AudienceRequirements(BaseModel):
+class AudienceRequirements(RequirementsModel):
     role: NonBlankStr
     background: NonBlankStr
     subject_familiarity: Literal["beginner", "intermediate", "advanced", "mixed"]
 
 
-class UseCaseRequirements(BaseModel):
+class UseCaseRequirements(RequirementsModel):
     scenario: NonBlankStr
     desired_outcome: NonBlankStr
     audience: AudienceRequirements
 
 
-class ReportRequirements(BaseModel):
-    required: bool
-    purpose: NonBlankStr | None = None
-    target_pages: PositiveRange | None = None
-    target_chinese_characters: PositiveRange | None = None
-    formats: list[ReportFormat] = Field(default_factory=list)
+class ReportRequirements(RequirementsModel):
+    required: Literal[True]
+    purpose: NonBlankStr
+    target_pages: PositiveRange
+    target_chinese_characters: PositiveRange
+    formats: tuple[Literal["qmd"], Literal["docx"], Literal["report_pdf"]]
     focus_topics: list[NonBlankStr] = Field(default_factory=list)
     de_emphasized_topics: list[NonBlankStr] = Field(default_factory=list)
-    technical_depth: Literal["overview", "balanced", "deep"] | None = None
-    narrative_preference: NonBlankStr | None = None
-    reading_context: NonBlankStr | None = None
-
-    @model_validator(mode="after")
-    def complete_when_required(self) -> ReportRequirements:
-        values = (
-            self.purpose,
-            self.target_pages,
-            self.target_chinese_characters,
-            self.technical_depth,
-            self.narrative_preference,
-            self.reading_context,
-        )
-        if self.required and (any(value is None for value in values) or not self.formats):
-            raise ValueError("enabled report settings must be complete")
-        return self
+    technical_depth: Literal["overview", "balanced", "deep"]
+    narrative_preference: NonBlankStr
+    reading_context: NonBlankStr
 
 
-class PresentationRequirements(BaseModel):
-    required: bool
-    purpose: NonBlankStr | None = None
-    duration_minutes: int | None = Field(default=None, ge=1)
-    target_slides: PositiveRange | None = None
-    formats: list[PresentationFormat] = Field(default_factory=list)
+class PresentationRequirements(RequirementsModel):
+    required: Literal[True]
+    purpose: NonBlankStr
+    duration_minutes: int = Field(ge=1)
+    target_slides: PositiveRange
+    formats: tuple[
+        Literal["pptx"],
+        Literal["slides_pdf"],
+        Literal["speaker_notes"],
+    ]
     focus_topics: list[NonBlankStr] = Field(default_factory=list)
-    speaker_notes_required: bool | None = None
-    speaking_context: NonBlankStr | None = None
-
-    @model_validator(mode="after")
-    def complete_when_required(self) -> PresentationRequirements:
-        values = (
-            self.purpose,
-            self.duration_minutes,
-            self.target_slides,
-            self.speaker_notes_required,
-            self.speaking_context,
-        )
-        if self.required and (any(value is None for value in values) or not self.formats):
-            raise ValueError("enabled presentation settings must be complete")
-        return self
+    speaker_notes_required: Literal[True]
+    speaking_context: NonBlankStr
 
 
-class LanguageRequirements(BaseModel):
+class LanguageRequirements(RequirementsModel):
     locale: Literal["zh-CN"]
     preserve_english_terms: bool
     translation_preferences: NonBlankStr
 
 
-class VisualRequirements(BaseModel):
+class VisualRequirements(RequirementsModel):
     style: NonBlankStr
-    template_path: NonBlankStr | None = None
+    template_path: None = None
     brand_requirements: list[NonBlankStr] = Field(default_factory=list)
     accessibility_requirements: list[NonBlankStr] = Field(default_factory=list)
 
 
-class EvidencePolicyRequirements(BaseModel):
-    allow_web_research: bool
-    allow_generated_result_figures: bool
-    prefer_original_figures: bool
+class EvidencePolicyRequirements(RequirementsModel):
+    allow_web_research: Literal[False]
+    allow_generated_result_figures: Literal[False]
+    prefer_original_figures: Literal[True]
     citation_expectations: NonBlankStr
 
 
-class DeliverableRequirements(BaseModel):
-    formats: list[DeliveryFormat] = Field(min_length=1)
-    output_location: NonBlankStr
-    naming_requirements: NonBlankStr
+class DeliverableRequirements(RequirementsModel):
+    formats: tuple[
+        Literal["qmd"],
+        Literal["docx"],
+        Literal["report_pdf"],
+        Literal["pptx"],
+        Literal["slides_pdf"],
+        Literal["speaker_notes"],
+    ]
+    output_location: Literal["dist/<paper-slug>"]
+    naming_requirements: Literal["paperflow-standard"]
 
 
-class ConfirmationRequirements(BaseModel):
+class ConfirmationRequirements(RequirementsModel):
     status: Literal["confirmed"]
     confirmed_at: datetime
     content_sha256: Sha256Str
 
 
-class AuthoringRequirements(BaseModel):
+class AuthoringRequirements(RequirementsModel):
     schema_version: Literal["1.0"] = "1.0"
     source: SourceRequirements
     use_case: UseCaseRequirements
@@ -139,18 +127,6 @@ class AuthoringRequirements(BaseModel):
     user_constraints: list[NonBlankStr] = Field(default_factory=list)
     assumptions: list[NonBlankStr] = Field(default_factory=list)
     confirmation: ConfirmationRequirements
-
-    @model_validator(mode="after")
-    def formats_match_enabled_outputs(self) -> AuthoringRequirements:
-        expected: set[str] = set()
-        if self.report.required:
-            expected.update(self.report.formats)
-        if self.presentation.required:
-            expected.update(self.presentation.formats)
-        if set(self.deliverables.formats) != expected:
-            raise ValueError("deliverable formats must match enabled output formats")
-        return self
-
 
 RequirementsInput = AuthoringRequirements | Mapping[str, Any]
 

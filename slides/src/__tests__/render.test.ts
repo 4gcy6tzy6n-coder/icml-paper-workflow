@@ -1,9 +1,15 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import type PptxGenJS from "pptxgenjs";
 import { describe, it, expect } from "vitest";
 import {
   StoryboardSchema,
   SlideSpecSchema,
   PaperIRSchema,
 } from "../models.js";
+import { renderDeck } from "../render.js";
+import { renderTakeawaySlide } from "../layouts/takeaway.js";
 
 const validSlideSpec = {
   slide_id: "slide-01",
@@ -120,5 +126,42 @@ describe("PaperIRSchema", () => {
   it("should parse a valid paper IR", () => {
     const result = PaperIRSchema.parse(validPaperIR);
     expect(result.metadata.title).toBe("Test Paper");
+  });
+});
+
+describe("renderDeck", () => {
+  it("atomically writes to a temporary pptx path before renaming", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "paperflow-slides-"));
+    const outputPath = path.join(directory, "presentation.pptx");
+    const storyboard = StoryboardSchema.parse(validStoryboard);
+    const paperIR = PaperIRSchema.parse(validPaperIR);
+
+    await expect(
+      renderDeck(storyboard, paperIR, { workspace: directory, outputPath })
+    ).resolves.toBeUndefined();
+    expect(fs.existsSync(outputPath)).toBe(true);
+
+    fs.rmSync(directory, { recursive: true, force: true });
+  });
+});
+
+describe("renderTakeawaySlide", () => {
+  it("uses the storyboard assertion title instead of a hard-coded heading", () => {
+    const texts: string[] = [];
+    const slide = {
+      background: {},
+      addText(text: string) {
+        texts.push(text);
+      },
+    } as unknown as PptxGenJS.Slide;
+    const spec = SlideSpecSchema.parse({
+      ...validSlideSpec,
+      assertion_title: "三句话理解论文",
+      layout: "takeaway",
+    });
+
+    renderTakeawaySlide({} as PptxGenJS, slide, spec, { workspace: "/tmp" });
+
+    expect(texts[0]).toBe("三句话理解论文");
   });
 });

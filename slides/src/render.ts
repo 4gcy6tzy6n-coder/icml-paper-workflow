@@ -36,7 +36,7 @@ export async function renderDeck(
     fs.mkdirSync(outDir, { recursive: true });
   }
 
-  const tmpPath = options.outputPath + ".tmp";
+  const tmpPath = options.outputPath + ".tmp.pptx";
   await pptx.writeFile({ fileName: tmpPath });
   fs.renameSync(tmpPath, options.outputPath);
 }

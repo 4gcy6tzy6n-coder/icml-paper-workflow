@@ -6,12 +6,15 @@ Uses mock external tools (Quarto, LibreOffice) for rendering steps.
 
 from pathlib import Path
 
+import fitz
+
 from paperflow.ingest.parser_chain import parse_with_fallback
 from paperflow.ingest.pymupdf_parser import PyMuPDFParser
 from paperflow.manifest import (
     advance_stage,
     create_manifest,
     load_manifest,
+    save_manifest,
 )
 from paperflow.models.common import WorkflowStage
 from paperflow.models.paper_ir import PaperIR
@@ -52,9 +55,14 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
 
     # 4. Build evidence
     from paperflow.evidence.builder import build_evidence_map
+    from paperflow.evidence.locator import build_semantic_packet
     evidence = build_evidence_map(doc)
     ws_paths = WorkspacePaths(ws)
     write_json(ws_paths.evidence_map, [ev.model_dump(mode="json") for ev in evidence])
+    ws_paths.semantic_packet.write_text(
+        build_semantic_packet(doc, evidence, ws_paths.paper_ir),
+        encoding="utf-8",
+    )
     assert len(evidence) > 0
 
     # 5. Validate sealed authoring requirements
@@ -66,6 +74,14 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     )
     assert requirements is not None
     assert requirement_issues == []
+    sealed_manifest = load_manifest(ws).model_copy(
+        update={
+            "validated_requirements_content_sha256": (
+                requirements.confirmation.content_sha256
+            )
+        }
+    )
+    save_manifest(ws, sealed_manifest)
     advance_stage(ws, WorkflowStage.PARSED, WorkflowStage.REQUIREMENTS_READY)
     assert load_manifest(ws).stage == WorkflowStage.REQUIREMENTS_READY
 
@@ -99,7 +115,14 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     advance_stage(ws, WorkflowStage.STORYBOARD_READY, WorkflowStage.RENDERED)
 
     # 11. Content QA
+    ws_paths.report_qmd.write_text("测" * 7000, encoding="utf-8")
+    report_pdf = fitz.open()
+    for _ in range(7):
+        report_pdf.new_page()
+    report_pdf.save(ws_paths.report_pdf)
+    report_pdf.close()
     qa_result = check_cross_artifact_consistency(ws)
+    assert qa_result.passed is True
     write_json(
         ws_paths.qa_dir / "content-qa.json",
         {
@@ -131,6 +154,11 @@ def test_full_pipeline_lifecycle(tmp_path: Path) -> None:
     assert "source_pdf_sha256" in final_manifest
     assert len(final_manifest["source_pdf_sha256"]) == 64
     assert final_manifest["qa"]["ir_valid"] is True
+    assert final_manifest["requirements"]["valid"] is True
+    assert (
+        final_manifest["requirements"]["content_sha256"]
+        == requirements.confirmation.content_sha256
+    )
     assert "artifacts" in final_manifest
 
     advance_stage(ws, WorkflowStage.VISUAL_QA_PASSED, WorkflowStage.FINALIZED)

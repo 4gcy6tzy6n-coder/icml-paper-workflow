@@ -1,6 +1,7 @@
 import re
 from pathlib import Path
 
+from paperflow.models.authoring_requirements import AuthoringRequirements
 from paperflow.models.common import Severity
 from paperflow.models.paper_ir import Contribution, NumericResult
 from paperflow.models.qa import QAResult, ValidationIssue
@@ -68,7 +69,10 @@ def check_placeholders(text: str, location: str = "") -> list[ValidationIssue]:
     return issues
 
 
-def check_cross_artifact_consistency(workspace: Path) -> QAResult:
+def check_cross_artifact_consistency(
+    workspace: Path,
+    requirements: AuthoringRequirements | None = None,
+) -> QAResult:
     """Run cross-artifact consistency checks between report and slides."""
     from paperflow.models.paper_ir import PaperIR
     from paperflow.paths import WorkspacePaths
@@ -76,6 +80,12 @@ def check_cross_artifact_consistency(workspace: Path) -> QAResult:
 
     ws_paths = WorkspacePaths(workspace)
     issues: list[ValidationIssue] = []
+    metrics: dict[str, float | int | str] = {}
+
+    if requirements is None and ws_paths.authoring_requirements.exists():
+        requirements = AuthoringRequirements.model_validate(
+            read_json(ws_paths.authoring_requirements)
+        )
 
     if not ws_paths.paper_ir.exists():
         return QAResult(
@@ -130,10 +140,123 @@ def check_cross_artifact_consistency(workspace: Path) -> QAResult:
         if all_evidence_refs
         else 1.0
     )
+    metrics["evidence_coverage"] = coverage
+
+    if requirements is not None:
+        target_result = check_confirmed_output_targets(workspace, requirements)
+        issues.extend(target_result.issues)
+        metrics.update(target_result.metrics)
 
     errors = [i for i in issues if i.severity == "error"]
     return QAResult(
         passed=len(errors) == 0,
         issues=issues,
-        metrics={"evidence_coverage": coverage},
+        metrics=metrics,
     )
+
+
+def check_confirmed_output_targets(
+    workspace: Path,
+    requirements: AuthoringRequirements,
+) -> QAResult:
+    issues: list[ValidationIssue] = []
+    metrics: dict[str, float | int | str] = {}
+    _check_confirmed_output_targets(workspace, requirements, issues, metrics)
+    return QAResult(
+        passed=not any(issue.severity == "error" for issue in issues),
+        issues=issues,
+        metrics=metrics,
+    )
+
+
+def _check_confirmed_output_targets(
+    workspace: Path,
+    requirements: AuthoringRequirements,
+    issues: list[ValidationIssue],
+    metrics: dict[str, float | int | str],
+) -> None:
+    from paperflow.models.slides import Storyboard
+    from paperflow.paths import WorkspacePaths
+    from paperflow.util.jsonio import read_json
+
+    ws_paths = WorkspacePaths(workspace)
+    if ws_paths.report_qmd.exists():
+        report_text = ws_paths.report_qmd.read_text(encoding="utf-8")
+        chinese_characters = len(
+            re.findall(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", report_text)
+        )
+        metrics["report_chinese_characters"] = chinese_characters
+        target = requirements.report.target_chinese_characters
+        if not target.minimum <= chinese_characters <= target.maximum:
+            issues.append(
+                ValidationIssue(
+                    code="REPORT_CHARACTER_TARGET_MISSED",
+                    severity=Severity.ERROR,
+                    message=(
+                        f"Report has {chinese_characters} Chinese characters; confirmed "
+                        f"target {target.minimum}–{target.maximum}."
+                    ),
+                    location="report/academic-report.qmd",
+                )
+            )
+
+    if ws_paths.report_pdf.exists():
+        import fitz  # type: ignore[import-untyped]
+
+        try:
+            with fitz.open(ws_paths.report_pdf) as document:
+                report_pages = document.page_count
+        except (RuntimeError, ValueError) as exc:
+            issues.append(
+                ValidationIssue(
+                    code="REPORT_PAGE_COUNT_UNREADABLE",
+                    severity=Severity.ERROR,
+                    message=f"Cannot count report PDF pages: {exc}",
+                    location="report/academic-report.pdf",
+                )
+            )
+        else:
+            metrics["report_pages"] = report_pages
+            target = requirements.report.target_pages
+            if not target.minimum <= report_pages <= target.maximum:
+                issues.append(
+                    ValidationIssue(
+                        code="REPORT_PAGE_TARGET_MISSED",
+                        severity=Severity.ERROR,
+                        message=(
+                            f"Report has {report_pages} pages; confirmed target "
+                            f"{target.minimum}–{target.maximum}."
+                        ),
+                        location="report/academic-report.pdf",
+                    )
+                )
+    else:
+        issues.append(
+            ValidationIssue(
+                code="REPORT_PDF_MISSING",
+                severity=Severity.ERROR,
+                message=(
+                    "Rendered report PDF is required for confirmed page-target QA; "
+                    "run paperflow render-report, then rerun paperflow qa-content."
+                ),
+                location="report/academic-report.pdf",
+            )
+        )
+
+    if ws_paths.storyboard.exists():
+        storyboard = Storyboard.model_validate(read_json(ws_paths.storyboard))
+        slide_count = len(storyboard.slides)
+        metrics["presentation_slides"] = slide_count
+        target = requirements.presentation.target_slides
+        if not target.minimum <= slide_count <= target.maximum:
+            issues.append(
+                ValidationIssue(
+                    code="PRESENTATION_SLIDE_TARGET_MISSED",
+                    severity=Severity.ERROR,
+                    message=(
+                        f"Presentation has {slide_count} slides; confirmed target "
+                        f"{target.minimum}–{target.maximum}."
+                    ),
+                    location="slides/storyboard.json",
+                )
+            )

@@ -1,6 +1,6 @@
 ---
 name: icml-paper-to-report-deck
-description: Use when converting one local English machine-learning research paper PDF into a source-grounded Chinese academic report, presentation, or both.
+description: Use when converting one local English machine-learning research paper PDF into a source-grounded Chinese academic report and presentation.
 ---
 
 # ICML Paper to Report and Deck
@@ -10,16 +10,16 @@ Convert one English ICML-style paper PDF into a source-grounded Chinese academic
 ## Trigger Conditions
 
 Use this skill when:
-- The user provides a research paper PDF and asks for a report, presentation, or slide deck.
+- The user provides a research paper PDF and asks for the PaperFlow report-and-deck workflow.
 - The user says "paperflow", "paper to report", "paper to slides", or references ICML/NeurIPS/ML conference paper conversion.
 - The input is one local PDF file and the output language is Chinese.
 
 ## Accepted Input
 
 - One local PDF file (English, ICML-style conference paper).
-- Default output language: `zh-CN`.
-- Default audience: graduate students.
-- Default talk duration: 15 minutes (13–15 slides).
+- Output language is fixed to `zh-CN`.
+- Graduate-student audience and a 15-minute, 13–15-slide talk are recommendations only.
+  They govern authoring only if the user explicitly accepts them and they are persisted.
 
 ## Required Environment Check
 
@@ -63,7 +63,12 @@ Read `references/requirements-intake.md` completely. Ask one question at a time,
 uv run paperflow validate-requirements .work/<paper-name>
 ```
 
-Do not begin Paper IR authoring until this command passes and the workspace reaches `REQUIREMENTS_READY`. Both report and slide authoring must read `source/authoring-requirements.json` and `source/paper-ir.json`.
+Do not begin Paper IR authoring until this command passes and the workspace reaches `REQUIREMENTS_READY`. Every later PaperFlow CLI boundary revalidates the exact sealed requirements. Both report and slide authoring must read `source/authoring-requirements.json` and `source/paper-ir.json`.
+
+Use confirmed use_case.audience role, background, and familiarity for explanation depth
+and examples; do not assume a graduate-student audience. If language.preserve_english_terms is false, follow language.translation_preferences
+instead of retaining English terms by default. Use confirmed visual.style, brand, and
+accessibility fields for both artifacts; any built-in layout or palette is subordinate.
 
 ### 4. Paper IR Authoring
 
@@ -109,10 +114,15 @@ This creates a `report/report-outline.json` with 16 planned sections.
 
 Write `report/academic-report.qmd` following `references/report-style.md`:
 
-- Target 7,000–10,000 Chinese characters.
+- Use the confirmed `report.target_chinese_characters` and `report.target_pages` ranges.
+- In operational terms: use confirmed report.target_chinese_characters and confirmed report.target_pages;
+  never replace them with a project recommendation.
+- Apply the confirmed report purpose, focus/de-emphasis, depth, narrative, reading context,
+  audience, terminology, visual, citation, constraint, and assumption fields.
 - Use full paragraphs, not bullet points.
 - Every substantive paragraph must end with: `<!-- evidence: ev-pXX-bYYY -->`
-- Preserve English technical terms, method names, dataset names, metric names.
+- If `language.preserve_english_terms` is true, preserve English technical terms as directed;
+  otherwise translate them according to `language.translation_preferences`.
 - Distinguish author statements from analyst inferences.
 - Include 2–5 original figures/tables using relative paths.
 
@@ -127,7 +137,11 @@ On success, advances to `REPORT_READY`.
 
 Write `slides/storyboard.json` following `references/slide-storytelling.md`:
 
-- 13–15 slides for a 15-minute talk.
+- Use the confirmed `presentation.target_slides` and `presentation.duration_minutes`.
+- In operational terms: use confirmed presentation.target_slides and confirmed presentation.duration_minutes;
+  never replace them with a project recommendation.
+- Apply the confirmed presentation purpose, focus, speaking context, audience, terminology,
+  visual, citation, constraint, and assumption fields.
 - Every slide title must be an assertion, not a section label.
 - 2–5 body lines per slide (max 6).
 - Maximum 520 characters of visible text per slide.
@@ -153,8 +167,6 @@ Uses Quarto → DOCX, then LibreOffice → PDF.
 
 **Slides rendering:**
 ```bash
-pnpm paperflow:render-slides -- .work/<paper-name>
-# or equivalently:
 uv run paperflow render-slides .work/<paper-name>
 ```
 
@@ -173,8 +185,15 @@ Checks:
 - Evidence reference validity.
 - Placeholder detection.
 - Selected asset usage.
+- Confirmed report Chinese-character/page ranges and presentation slide range when the
+  corresponding artifacts are available.
 
 On success, advances to `CONTENT_QA_PASSED`.
+
+If content QA reports `REPORT_PDF_MISSING` or `REPORT_PAGE_TARGET_MISSED`, correct the
+report source or render settings, rerun `paperflow render-report` while the workspace
+remains at `RENDERED`, and rerun `paperflow qa-content`. Do not edit QA output to bypass
+the confirmed range.
 
 ### 10. Visual QA with Mandatory Fix Cycle
 
@@ -197,7 +216,7 @@ Create `qa/visual-review.json` with inspection results. Record at least one insp
 
 If issues are found, fix the storyboard or layout configuration, then:
 ```bash
-pnpm paperflow:render-slides -- .work/<paper-name>
+uv run paperflow render-slides .work/<paper-name>
 uv run paperflow render-preview .work/<paper-name>
 ```
 Update `visual-review.json` with `rerendered: true`.
@@ -215,7 +234,9 @@ On success, advances to `VISUAL_QA_PASSED`.
 uv run paperflow finalize .work/<paper-name>
 ```
 
-Copies all verified artifacts to `dist/<paper-slug>/` and writes `qa/final-manifest.json` with checksums, tool versions, and QA results.
+Copies the fixed report and presentation artifact set plus the sealed requirements audit
+record to `dist/<paper-slug>/`. It writes `qa/final-manifest.json` with checksums, tool
+versions, QA results, and requirements digest/validity.
 
 ### 12. Failure and Resume
 

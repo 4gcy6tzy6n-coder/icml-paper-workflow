@@ -51,6 +51,10 @@ class WorkspacePaths:
         return self.source_dir / "evidence-map.json"
 
     @property
+    def semantic_packet(self) -> Path:
+        return self.source_dir / "semantic-packet.md"
+
+    @property
     def report_qmd(self) -> Path:
         return self.report_dir / "academic-report.qmd"
 

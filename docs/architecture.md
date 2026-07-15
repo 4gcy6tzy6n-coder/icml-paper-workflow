@@ -33,21 +33,29 @@ The project skill owns conversational intake and asks one question at a time. De
 ## Canonical Data Flow
 
 ```
-  ┌──────────────────┐
-  │   parsed-paper.md │ ← Deterministic (MinerU API / local parsers)
-  └────────┬─────────┘
-           │
-  ┌────────▼─────────┐
-  │  paper-ir.json   │ ← Claude Code authors (semantic)
-  │   (canonical)    │
-  └────────┬─────────┘
-           │
-     ┌─────┴─────┐
-     ▼           ▼
-  report.qmd   storyboard.json  ← Claude Code authors
-     │           │
-     ▼           ▼
-  .docx/.pdf   .pptx/.pdf       ← Deterministic renderers
+  parsed-paper.md + evidence-map.json  ← Deterministic extraction
+                   │
+                   ▼
+  one-question-at-a-time requirements intake  ← Project skill
+                   │ explicit confirmation
+                   ▼
+  source/authoring-requirements.json
+                   │ paperflow validate-requirements
+                   ▼
+             REQUIREMENTS_READY
+                   │
+                   ▼
+             paper-ir.json  ← Project skill authors (canonical)
+                   │ paperflow validate-ir
+                   ▼
+                IR_READY
+                   │
+           ┌───────┴───────┐
+           ▼               ▼
+       report.qmd     storyboard.json  ← Project skill authors
+           │               │
+           ▼               ▼
+       .docx/.pdf       .pptx/.pdf     ← Deterministic renderers
 ```
 
 No renderer may independently reinterpret the source paper.

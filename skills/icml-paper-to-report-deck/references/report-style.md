@@ -21,10 +21,20 @@
 
 ## Writing Rules
 
-- **Target**: 7,000–10,000 Chinese characters, 8–12 pages after DOCX rendering.
+- **Length**: Read the confirmed `report.target_chinese_characters` and
+  `report.target_pages` ranges from `source/authoring-requirements.json`. A recommendation
+  such as 7,000–10,000 characters or 8–12 pages has no force until accepted and persisted.
+- **Intent**: Apply the confirmed report purpose, audience, focus/de-emphasis, technical
+  depth, narrative preference, reading context, terminology, visual, citation, constraint,
+  and assumption fields.
 - **Style**: Full paragraphs, not bullet points. Explain rather than translate.
-- **Technical terms**: Preserve English method names, dataset names, metric names, symbols, and equations.
-- **Audience**: Graduate students familiar with ML fundamentals.
+- **Technical terms**: If `language.preserve_english_terms` is true, preserve terms as
+  directed. If it is false, follow `language.translation_preferences`; keep source wording
+  only where evidence fidelity requires it.
+- **Audience**: Use the confirmed `use_case.audience` role, background, and familiarity.
+  Do not assume a graduate-student audience.
+- **Visual direction**: Use confirmed `visual.style`, brand, and accessibility fields;
+  template defaults are recommendations and never override those confirmed values.
 - **Tone**: Objective, analytical, scholarly.
 
 ## Evidence Requirements

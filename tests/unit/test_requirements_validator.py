@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from paperflow.requirements.validator import validate_requirements_file
+from paperflow.requirements.validator import (
+    validate_evidence_outputs,
+    validate_requirements_file,
+)
 from paperflow.util.jsonio import write_json
 from tests.fixtures.make_authoring_requirements import make_authoring_requirements
 
@@ -48,13 +51,13 @@ def test_content_edit_returns_digest_mismatch(tmp_path: Path) -> None:
     assert {issue.code for issue in issues} == {"REQ_CONFIRMATION_DIGEST_MISMATCH"}
 
 
-def test_unknown_field_returns_digest_mismatch(tmp_path: Path) -> None:
+def test_unknown_field_returns_schema_invalid(tmp_path: Path) -> None:
     path = tmp_path / "requirements.json"
     data = make_authoring_requirements("a" * 64)
     data["visual"]["reviewer_note"] = "added after confirmation"
     write_json(path, data)
     _, issues = validate_requirements_file(path, "a" * 64)
-    assert {issue.code for issue in issues} == {"REQ_CONFIRMATION_DIGEST_MISMATCH"}
+    assert {issue.code for issue in issues} == {"REQ_SCHEMA_INVALID"}
 
 
 def test_surrounding_whitespace_edit_returns_digest_mismatch(tmp_path: Path) -> None:
@@ -73,3 +76,27 @@ def test_schema_error_returns_req_schema_invalid(tmp_path: Path) -> None:
     write_json(path, data)
     _, issues = validate_requirements_file(path, "a" * 64)
     assert {issue.code for issue in issues} == {"REQ_SCHEMA_INVALID"}
+
+
+def test_empty_evidence_map_is_not_an_intake_prerequisite(tmp_path: Path) -> None:
+    evidence_map = tmp_path / "evidence-map.json"
+    semantic_packet = tmp_path / "semantic-packet.md"
+    write_json(evidence_map, [])
+    semantic_packet.write_text("# Semantic packet", encoding="utf-8")
+
+    issues = validate_evidence_outputs(evidence_map, semantic_packet)
+
+    assert {issue.code for issue in issues} == {"REQ_EVIDENCE_MAP_EMPTY"}
+
+
+def test_malformed_evidence_records_are_not_an_intake_prerequisite(
+    tmp_path: Path,
+) -> None:
+    evidence_map = tmp_path / "evidence-map.json"
+    semantic_packet = tmp_path / "semantic-packet.md"
+    write_json(evidence_map, [{"id": "not-a-usable-evidence-record"}])
+    semantic_packet.write_text("# Semantic packet", encoding="utf-8")
+
+    issues = validate_evidence_outputs(evidence_map, semantic_packet)
+
+    assert {issue.code for issue in issues} == {"REQ_EVIDENCE_MAP_INVALID"}

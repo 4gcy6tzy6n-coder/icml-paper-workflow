@@ -1,6 +1,16 @@
 # Slide Storytelling Guide
 
-## Default Structure (15-Minute Talk, 13–15 Slides)
+## Example Structure (Recommendation Only)
+
+Read the confirmed `presentation.target_slides` and
+`presentation.duration_minutes` from `source/authoring-requirements.json`. Use this
+15-slide outline only when it fits those confirmed values. Also apply the confirmed
+purpose, focus topics, speaking context, audience, terminology, visual, citation,
+constraint, and assumption fields.
+
+Use the confirmed `use_case.audience` and do not assume a graduate-student audience. If
+`language.preserve_english_terms` is false, follow `language.translation_preferences` in
+titles, labels, and notes.
 
 | # | Purpose | Layout |
 |---|---------|--------|
@@ -41,8 +51,9 @@
 
 ## Color Scheme
 
-- Title, conclusion, and Q&A slides may use dark backgrounds.
-- Content slides remain light (`F7F8FA` background).
+- The dark-title/light-content palette is only a recommendation.
+- Confirmed visual direction takes precedence: derive colors and emphasis from confirmed
+  `visual.style`, `visual.brand_requirements`, and `visual.accessibility_requirements`.
 - Do not use fake logos or decorative AI imagery.
 
 ## Evidence

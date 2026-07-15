@@ -1,3 +1,4 @@
+from paperflow.models.authoring_requirements import PositiveRange
 from paperflow.models.common import Severity
 from paperflow.models.qa import ValidationIssue
 from paperflow.models.slides import Storyboard
@@ -9,10 +10,13 @@ _NON_ASSERTION_TITLES = {
 }
 
 
-def validate_storyboard(storyboard: Storyboard) -> list[ValidationIssue]:
+def validate_storyboard(
+    storyboard: Storyboard,
+    target_slides: PositiveRange | None = None,
+) -> list[ValidationIssue]:
     issues: list[ValidationIssue] = []
 
-    _check_slide_count(storyboard, issues)
+    _check_slide_count(storyboard, issues, target_slides)
     _check_duplicate_ids(storyboard, issues)
     _check_body_lines(storyboard, issues)
     _check_notes_and_footer(storyboard, issues)
@@ -21,7 +25,9 @@ def validate_storyboard(storyboard: Storyboard) -> list[ValidationIssue]:
 
 
 def _check_slide_count(
-    storyboard: Storyboard, issues: list[ValidationIssue]
+    storyboard: Storyboard,
+    issues: list[ValidationIssue],
+    target_slides: PositiveRange | None,
 ) -> None:
     count = len(storyboard.slides)
     if count < 6 or count > 40:
@@ -30,6 +36,20 @@ def _check_slide_count(
                 code="SLIDES_COUNT_OUT_OF_RANGE",
                 severity=Severity.ERROR,
                 message=f"Slide count {count} is out of allowed range (6–40).",
+            )
+        )
+    if target_slides is not None and not (
+        target_slides.minimum <= count <= target_slides.maximum
+    ):
+        issues.append(
+            ValidationIssue(
+                code="PRESENTATION_SLIDE_TARGET_MISSED",
+                severity=Severity.ERROR,
+                message=(
+                    f"Storyboard has {count} slides; confirmed target "
+                    f"{target_slides.minimum}–{target_slides.maximum}."
+                ),
+                location="slides/storyboard.json",
             )
         )
 

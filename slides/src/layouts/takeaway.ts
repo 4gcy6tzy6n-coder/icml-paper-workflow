@@ -11,7 +11,7 @@ export function renderTakeawaySlide(
 ): void {
   slide.background = { fill: COLORS.primary };
 
-  slide.addText("Key Takeaways", {
+  slide.addText(spec.assertion_title, {
     x: SLIDE.marginX,
     y: 1.2,
     w: SLIDE.width - 2 * SLIDE.marginX,

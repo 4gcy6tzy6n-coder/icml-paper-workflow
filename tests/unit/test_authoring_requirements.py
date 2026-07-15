@@ -48,3 +48,54 @@ def test_enabled_report_requires_formats() -> None:
     data["deliverables"]["formats"] = ["pptx", "slides_pdf", "speaker_notes"]
     with pytest.raises(ValidationError):
         AuthoringRequirements.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("section", "value"),
+    [("report", False), ("presentation", False)],
+)
+def test_both_outputs_are_mandatory(section: str, value: bool) -> None:
+    data = make_authoring_requirements("a" * 64)
+    data[section]["required"] = value
+    with pytest.raises(ValidationError):
+        AuthoringRequirements.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("report", "formats"), ["qmd", "docx"]),
+        (("presentation", "formats"), ["pptx", "speaker_notes"]),
+        (
+            ("deliverables", "formats"),
+            ["qmd", "docx", "report_pdf", "pptx", "speaker_notes"],
+        ),
+        (("presentation", "speaker_notes_required"), False),
+        (("deliverables", "output_location"), "some/arbitrary/path"),
+        (("deliverables", "naming_requirements"), "custom names"),
+        (("evidence_policy", "allow_web_research"), True),
+        (("evidence_policy", "allow_generated_result_figures"), True),
+        (("evidence_policy", "prefer_original_figures"), False),
+        (("visual", "template_path"), "/tmp/custom-template.pptx"),
+    ],
+)
+def test_unsupported_output_configuration_is_rejected(
+    path: tuple[str, str], value: object
+) -> None:
+    data = make_authoring_requirements("a" * 64)
+    section, field = path
+    data[section][field] = value
+    with pytest.raises(ValidationError):
+        AuthoringRequirements.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    ("section", "field"),
+    [(None, "unexpected"), ("visual", "reviewer_note")],
+)
+def test_unknown_fields_are_rejected(section: str | None, field: str) -> None:
+    data = make_authoring_requirements("a" * 64)
+    target = data if section is None else data[section]
+    target[field] = "must not be silently ignored"
+    with pytest.raises(ValidationError):
+        AuthoringRequirements.model_validate(data)

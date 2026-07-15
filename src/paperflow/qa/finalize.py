@@ -4,8 +4,10 @@ import unicodedata
 from pathlib import Path
 from typing import Any
 
+from paperflow.models.authoring_requirements import AuthoringRequirements
 from paperflow.models.common import WorkflowStage
 from paperflow.util.hashing import sha256_file
+from paperflow.util.jsonio import read_json
 
 
 def create_slug(title: str) -> str:
@@ -20,6 +22,21 @@ def create_slug(title: str) -> str:
     return slug[:80]
 
 
+def _load_finalization_requirements(workspace: Path) -> AuthoringRequirements:
+    from paperflow.requirements.validator import load_validated_requirements
+
+    manifest_data = read_json(workspace / "manifest.json")
+    requirements, issues = load_validated_requirements(
+        workspace / "source" / "authoring-requirements.json",
+        str(manifest_data.get("source_sha256", "")),
+        manifest_data.get("validated_requirements_content_sha256"),
+    )
+    if requirements is None or issues:
+        codes = ", ".join(issue.code for issue in issues)
+        raise ValueError(f"Sealed requirements revalidation failed: {codes}")
+    return requirements
+
+
 def build_final_manifest(
     workspace: Path,
     source_pdf: Path,
@@ -30,8 +47,33 @@ def build_final_manifest(
     """Build the final reproducible manifest."""
     import sys
 
+    visual_review_path = workspace / "qa" / "visual-review.json"
+    visual_fix_cycle_count = 0
+    if visual_review_path.exists():
+        visual_review = read_json(visual_review_path)
+        visual_fix_cycle_count = int(visual_review.get("inspection_pass", 0))
+
+    requirements_digest: str | None = None
+    requirements_valid = False
+    workflow_manifest_path = workspace / "manifest.json"
+    requirements_path = workspace / "source" / "authoring-requirements.json"
+    if workflow_manifest_path.exists():
+        from paperflow.requirements.validator import load_validated_requirements
+
+        workflow_manifest = read_json(workflow_manifest_path)
+        requirements_digest = workflow_manifest.get(
+            "validated_requirements_content_sha256"
+        )
+        requirements, issues = load_validated_requirements(
+            requirements_path,
+            str(workflow_manifest.get("source_sha256", "")),
+            requirements_digest,
+        )
+        requirements_valid = requirements is not None and not issues
+
     manifest: dict[str, Any] = {
         "workflow_version": "1.0",
+        "stage": stage.value,
         "source_pdf_sha256": sha256_file(source_pdf),
         "paper_title": paper_title,
         "parser_used": parser_used or "unknown",
@@ -47,10 +89,18 @@ def build_final_manifest(
             "storyboard_valid": True,
             "content_qa_passed": True,
             "visual_qa_passed": True,
-            "visual_fix_cycle_count": 0,
+            "visual_fix_cycle_count": visual_fix_cycle_count,
+        },
+        "requirements": {
+            "content_sha256": requirements_digest,
+            "valid": requirements_valid,
         },
         "artifacts": {},
     }
+
+    report_qmd = workspace / "report" / "academic-report.qmd"
+    if report_qmd.exists():
+        manifest["artifacts"]["report/academic-report.qmd"] = sha256_file(report_qmd)
 
     report_docx = workspace / "report" / "academic-report.docx"
     if report_docx.exists():
@@ -60,6 +110,12 @@ def build_final_manifest(
     if report_pdf.exists():
         manifest["artifacts"]["report/academic-report.pdf"] = sha256_file(report_pdf)
 
+    report_reference = workspace / "report" / "compact-reference.docx"
+    if report_reference.exists():
+        manifest["artifacts"]["report/compact-reference.docx"] = sha256_file(
+            report_reference
+        )
+
     deck_pptx = workspace / "slides" / "presentation.pptx"
     if deck_pptx.exists():
         manifest["artifacts"]["slides/presentation.pptx"] = sha256_file(deck_pptx)
@@ -67,6 +123,15 @@ def build_final_manifest(
     deck_pdf = workspace / "slides" / "presentation.pdf"
     if deck_pdf.exists():
         manifest["artifacts"]["slides/presentation.pdf"] = sha256_file(deck_pdf)
+
+    notes = workspace / "slides" / "speaker-notes.md"
+    if notes.exists():
+        manifest["artifacts"]["slides/speaker-notes.md"] = sha256_file(notes)
+
+    if requirements_path.exists():
+        manifest["artifacts"]["source/authoring-requirements.json"] = sha256_file(
+            requirements_path
+        )
 
     return manifest
 
@@ -80,8 +145,12 @@ def finalize_workspace(workspace: Path, dist_dir: Path) -> list[Path]:
     required = [
         workspace / "report" / "academic-report.qmd",
         workspace / "report" / "academic-report.docx",
+        workspace / "report" / "academic-report.pdf",
         workspace / "slides" / "presentation.pptx",
+        workspace / "slides" / "presentation.pdf",
         workspace / "slides" / "speaker-notes.md",
+        workspace / "slides" / "storyboard.json",
+        workspace / "source" / "authoring-requirements.json",
     ]
 
     for path in required:
@@ -90,16 +159,31 @@ def finalize_workspace(workspace: Path, dist_dir: Path) -> list[Path]:
                 f"Required artifact not found: {path.relative_to(workspace)}"
             )
 
+    if dist_dir.name != "dist":
+        raise ValueError(
+            "Finalization output is fixed by sealed policy to dist/<paper-slug>."
+        )
+
+    requirements = _load_finalization_requirements(workspace)
+    from paperflow.qa.consistency import check_confirmed_output_targets
+
+    target_result = check_confirmed_output_targets(workspace, requirements)
+    if not target_result.passed:
+        failures = "; ".join(
+            f"[{issue.code}] {issue.message}"
+            for issue in target_result.issues
+            if issue.severity == "error"
+        )
+        raise ValueError(f"Confirmed output target validation failed: {failures}")
+
     manifest_data = {}
     manifest_path = workspace / "manifest.json"
     if manifest_path.exists():
         import json
         manifest_data = json.loads(manifest_path.read_text())
 
-    title = manifest_data.get("config", {}).get("title", "paper")
-    if isinstance(title, dict):
-        title = "paper"
-    slug = create_slug(str(title))
+    title = requirements.source.title
+    slug = create_slug(title)
 
     output_root = dist_dir / slug
     shutil.rmtree(output_root, ignore_errors=True)
@@ -117,12 +201,14 @@ def finalize_workspace(workspace: Path, dist_dir: Path) -> list[Path]:
         rpt / "academic-report.qmd": orpt / "academic-report.qmd",
         rpt / "academic-report.docx": orpt / "academic-report.docx",
         rpt / "academic-report.pdf": orpt / "academic-report.pdf",
+        rpt / "compact-reference.docx": orpt / "compact-reference.docx",
         sld / "presentation.pptx": osld / "presentation.pptx",
         sld / "presentation.pdf": osld / "presentation.pdf",
         sld / "speaker-notes.md": osld / "speaker-notes.md",
         sld / "storyboard.json": osld / "storyboard.json",
         src / "paper-ir.json": osrc / "paper-ir.json",
         src / "evidence-map.json": osrc / "evidence-map.json",
+        src / "authoring-requirements.json": osrc / "authoring-requirements.json",
     }
 
     for src, dst in file_map.items():
@@ -155,7 +241,7 @@ def finalize_workspace(workspace: Path, dist_dir: Path) -> list[Path]:
     final = build_final_manifest(
         workspace=workspace,
         source_pdf=source_pdf,
-        paper_title=title if isinstance(title, str) else "paper",
+        paper_title=title,
         parser_used=manifest_data.get("parser_used"),
         stage=WorkflowStage.FINALIZED,
     )

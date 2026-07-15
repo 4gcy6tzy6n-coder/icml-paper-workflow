@@ -30,6 +30,7 @@ class WorkflowManifest(BaseModel):
     stage: WorkflowStage
     source_pdf: str
     source_sha256: str
+    validated_requirements_content_sha256: str | None = None
     workspace: str
     config: WorkflowConfig = Field(default_factory=WorkflowConfig)
     parser_used: str | None = None
